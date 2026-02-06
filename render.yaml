@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: bot-price-analyzer-webhook
+    name: bot-analyzer-pro
     env: python
     region: frankfurt
     buildCommand: pip install -r requirements.txt
@@ -12,6 +12,6 @@ services:
         sync: false
       - key: PORT
         value: 8443
-    healthCheckPath: /health
+    healthCheckPath: /
     autoDeploy: true
     plan: free
