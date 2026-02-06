@@ -1,17 +1,17 @@
 services:
   - type: web
-    name: bot-price-analyzer-final
+    name: bot-price-analyzer-webhook
     env: python
-    region: frankfurt  # نزدیک به ایران
+    region: frankfurt
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
         sync: false
       - key: WEBHOOK_URL
-        sync: false  # Render خودش پر می‌کند
+        sync: false
       - key: PORT
         value: 8443
-    healthCheckPath: /
+    healthCheckPath: /health
     autoDeploy: true
     plan: free
