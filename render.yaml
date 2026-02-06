@@ -1,23 +1,17 @@
-# render.yaml
 services:
   - type: web
-    name: telegram-bot-price-analyzer
+    name: bot-price-analyzer-final
     env: python
-    runtime: python
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
+    region: frankfurt  # نزدیک به ایران
+    buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
         sync: false
       - key: WEBHOOK_URL
-        sync: false
+        sync: false  # Render خودش پر می‌کند
       - key: PORT
         value: 8443
-    autoDeploy: true
     healthCheckPath: /
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
+    autoDeploy: true
+    plan: free
