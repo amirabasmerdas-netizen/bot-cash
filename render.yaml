@@ -1,7 +1,8 @@
 services:
   - type: web
-    name: bot-price-analyzer
+    name: bot-analyzer-final
     env: python
+    region: frankfurt
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
