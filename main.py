@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 """
-🤖 Telegram Bot Price Analyzer - Professional Edition
-Version: 3.0 - Optimized for Render
+🤖 Telegram Bot Price Analyzer - Ultimate Edition
+Version: 4.0 - No Pillow, Fast & Stable
 Author: AI Assistant
-Deploy: Render + Webhook (Fast & Stable)
+Deploy: Render + Webhook (Optimized)
 """
 
 import os
 import re
-import ast
 import json
 import asyncio
 import logging
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Optional, Any
 from datetime import datetime
 from dataclasses import dataclass, field
-from io import BytesIO
 
 import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -25,7 +23,7 @@ from telegram.ext import (
 )
 
 # ==================== CONFIGURATION ====================
-TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
+TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 PORT = int(os.environ.get("PORT", 8443))
 EXCHANGE_RATE_API = "https://api.exchangerate-api.com/v4/latest/USD"
@@ -40,378 +38,312 @@ logger = logging.getLogger(__name__)
 # ==================== DATA MODELS ====================
 @dataclass
 class CodeFeature:
-    """مدل ویژگی‌های استخراج شده از کد"""
     commands: List[str] = field(default_factory=list)
     keyboards: int = 0
     inline_buttons: int = 0
-    admin_tools: List[str] = field(default_factory=list)
-    games: List[str] = field(default_factory=list)
-    user_management: bool = False
-    lines_of_code: int = 0
-    async_code: bool = False
-    error_handling: bool = False
-    modular: bool = False
-    integrations: List[str] = field(default_factory=list)
-    database_used: bool = False
-    payment_gateway: bool = False
-    external_apis: List[str] = field(default_factory=list)
-    comments_ratio: float = 0.0
-    code_quality: float = 0.0
+    has_admin: bool = False
+    has_games: bool = False
+    has_database: bool = False
+    has_payment: bool = False
     has_webhook: bool = False
-    has_scheduler: bool = False
+    lines_of_code: int = 0
+    is_async: bool = False
+    has_error_handling: bool = False
+    external_apis: List[str] = field(default_factory=list)
+    comment_ratio: float = 0.0
+    complexity_score: float = 0.0
 
 @dataclass
-class ScoringResult:
-    """نتیجه امتیازدهی"""
-    feature_scores: Dict[str, float] = field(default_factory=dict)
-    total_score: float = 0.0
+class PriceResult:
+    score: float = 0.0
+    price_rials: int = 0
+    price_tomans: int = 0
+    price_usd: float = 0.0
     details: Dict[str, Any] = field(default_factory=dict)
 
-@dataclass
-class PriceCalculation:
-    """محاسبه قیمت"""
-    base_price: int = 2_000_000  # 2,000,000 Rials
-    dollar_rate: float = 50_000.0  # Default
-    score_multiplier: float = 1.0
-    final_price: int = 0
-    breakdown: Dict[str, Any] = field(default_factory=dict)
-
 # ==================== CODE ANALYZER ====================
-class TelegramCodeAnalyzer:
-    """تحلیل‌گر هوشمند کد ربات تلگرام"""
+class CodeAnalyzer:
+    """تحلیل‌گر ساده و سریع کد"""
     
-    def __init__(self):
-        self.features = CodeFeature()
-        
-    async def analyze_file(self, file_content: str) -> CodeFeature:
-        """تحلیل کامل کد پایتون"""
-        
-        # تحلیل اولیه
-        self._quick_analysis(file_content)
-        
-        # تحلیل عمیق
-        await self._deep_analysis(file_content)
-        
-        return self.features
-    
-    def _quick_analysis(self, content: str):
-        """تحلیل سریع با regex"""
-        
-        # تعداد خطوط کد
+    @staticmethod
+    async def analyze(content: str) -> CodeFeature:
+        """تحلیل اصلی کد"""
+        features = CodeFeature()
         lines = content.split('\n')
+        
+        # شمارش خطوط کد
         code_lines = [l for l in lines if l.strip() and not l.strip().startswith('#')]
-        self.features.lines_of_code = len(code_lines)
+        features.lines_of_code = len(code_lines)
         
         # نسبت کامنت
         comment_lines = len([l for l in lines if l.strip().startswith('#')])
-        if self.features.lines_of_code > 0:
-            self.features.comments_ratio = comment_lines / self.features.lines_of_code
+        if features.lines_of_code > 0:
+            features.comment_ratio = comment_lines / features.lines_of_code
+        
+        # تحلیل محتوای کد
+        content_lower = content.lower()
         
         # تشخیص async
-        self.features.async_code = any(
-            re.search(pattern, content, re.IGNORECASE) 
-            for pattern in [r'async def', r'asyncio', r'await']
-        )
+        features.is_async = any(x in content_lower for x in ['async def', 'asyncio', 'await'])
         
         # تشخیص دستورات
         command_patterns = [
-            (r'CommandHandler\("(\w+)"', 'standard'),
-            (r'@app\.command\("(\w+)"', 'decorator'),
-            (r'async def (\w+).*update.*context', 'function')
+            r'commandhandler.*"(\w+)"',
+            r'@app\.command.*"(\w+)"',
+            r'async def (\w+).*update.*context',
+            r'def (\w+).*update.*context'
         ]
         
-        for pattern, _ in command_patterns:
+        all_commands = []
+        for pattern in command_patterns:
             matches = re.findall(pattern, content, re.IGNORECASE)
             for match in matches:
-                if isinstance(match, str) and match not in self.features.commands:
-                    self.features.commands.append(match)
-    
-    async def _deep_analysis(self, content: str):
-        """تحلیل عمیق کد"""
+                if isinstance(match, tuple):
+                    match = match[0]
+                if match and match not in all_commands and len(match) > 2:
+                    all_commands.append(match)
+        
+        features.commands = all_commands[:20]  # محدودیت
         
         # تشخیص کیبوردها
-        keyboard_patterns = [
-            (r'ReplyKeyboardMarkup', 'keyboard'),
-            (r'InlineKeyboardMarkup', 'inline_keyboard'),
-            (r'KeyboardButton', 'button'),
-            (r'InlineKeyboardButton', 'inline_button')
-        ]
+        features.keyboards = len(re.findall(r'replykeyboardmarkup|keyboardmarkup', content_lower))
+        features.inline_buttons = len(re.findall(r'inlinekeyboardmarkup|inlinekeyboardbutton', content_lower))
         
-        for pattern, key in keyboard_patterns:
-            matches = re.findall(pattern, content)
-            if key == 'inline_button':
-                self.features.inline_buttons += len(matches)
-            elif key == 'keyboard':
-                self.features.keyboards += 1
-        
-        # تشخیص دیتابیس
-        db_patterns = [
-            r'sqlite3', r'psycopg2', r'mysql', r'pymongo',
-            r'peewee', r'sqlalchemy', r'redis', r'PostgreSQL'
-        ]
-        
-        for pattern in db_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                self.features.database_used = True
-                self.features.integrations.append('database')
-                break
-        
-        # تشخیص پرداخت
-        payment_patterns = [
-            r'zarinpal', r'idpay', r'nextpay', r'پرداخت',
-            r'payment.*gateway', r'درگاه.*پرداخت'
-        ]
-        
-        for pattern in payment_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                self.features.payment_gateway = True
-                self.features.integrations.append('payment')
-                break
+        # تشخیص ویژگی‌های خاص
+        features.has_admin = any(x in content_lower for x in ['admin', 'sudo', 'مدیر', 'ادمین'])
+        features.has_games = any(x in content_lower for x in ['game', 'play', 'بازی', 'حدس'])
+        features.has_database = any(x in content_lower for x in ['sql', 'database', 'db', 'دیتابیس', 'mysql', 'sqlite'])
+        features.has_payment = any(x in content_lower for x in ['payment', 'pay', 'پرداخت', 'zarinpal', 'idpay'])
+        features.has_webhook = 'webhook' in content_lower
+        features.has_error_handling = any(x in content_lower for x in ['try:', 'except:', 'error', 'خطا'])
         
         # تشخیص API خارجی
-        api_patterns = [
-            r'requests\.(get|post|put|delete)',
-            r'httpx\.', r'aiohttp\.',
-            r'api\.', r'\.com/api'
-        ]
+        if re.search(r'requests\.(get|post)|httpx|aiohttp', content_lower):
+            features.external_apis.append('http_client')
         
-        for pattern in api_patterns:
-            if re.search(pattern, content):
-                self.features.external_apis.append('external_api')
+        # محاسبه پیچیدگی
+        features.complexity_score = CodeAnalyzer._calculate_complexity(features)
         
-        # تشخیص وب‌هوک
-        self.features.has_webhook = any(
-            re.search(pattern, content, re.IGNORECASE)
-            for pattern in [r'webhook', r'run_webhook', r'setWebhook']
-        )
-        
-        # تشخیص زمان‌بند
-        self.features.has_scheduler = any(
-            re.search(pattern, content, re.IGNORECASE)
-            for pattern in [r'job_queue', r'run_repeating', r'JobQueue']
-        )
-        
-        # تشخیص مدیریت خطا
-        self.features.error_handling = any(
-            re.search(pattern, content, re.IGNORECASE)
-            for pattern in [r'try.*except', r'except.*:', r'error.*handling']
-        )
-        
-        # محاسبه کیفیت کد
-        self._calculate_code_quality(content)
+        return features
     
-    def _calculate_code_quality(self, content: str):
-        """محاسبه کیفیت کد"""
-        quality_score = 0.0
+    @staticmethod
+    def _calculate_complexity(features: CodeFeature) -> float:
+        """محاسبه امتیاز پیچیدگی"""
+        score = 0.0
         
-        # 1. ساختار
-        if 'class ' in content:
-            quality_score += 0.2
+        # بر اساس خطوط کد
+        if features.lines_of_code > 1000:
+            score += 0.8
+        elif features.lines_of_code > 500:
+            score += 0.6
+        elif features.lines_of_code > 200:
+            score += 0.4
+        elif features.lines_of_code > 50:
+            score += 0.2
         
-        # 2. کامنت
-        if self.features.comments_ratio > 0.1:
-            quality_score += 0.3
-        elif self.features.comments_ratio > 0.05:
-            quality_score += 0.1
-        
-        # 3. مدیریت خطا
-        if self.features.error_handling:
-            quality_score += 0.2
-        
-        # 4. async
-        if self.features.async_code:
-            quality_score += 0.1
-        
-        # 5. webhook
-        if self.features.has_webhook:
-            quality_score += 0.1
-        
-        # 6. نام‌گذاری
-        if re.search(r'def get_|def handle_|def process_', content):
-            quality_score += 0.1
-        
-        self.features.code_quality = min(quality_score, 1.0)
-
-# ==================== SCORING SYSTEM ====================
-class PriceScoringEngine:
-    """موتور امتیازدهی و قیمت‌گذاری"""
-    
-    def __init__(self, dollar_rate: float = 50000.0):
-        self.dollar_rate = dollar_rate
-        
-    async def calculate_score(self, features: CodeFeature) -> ScoringResult:
-        """محاسبه امتیاز کلی"""
-        
-        scores = {}
-        details = {}
-        
-        # 1. امتیاز دستورات
-        cmd_count = len(features.commands)
-        cmd_score = min(cmd_count * 2, 15)
-        scores['commands'] = cmd_score
-        details['commands'] = {
-            'count': cmd_count,
-            'score': cmd_score
-        }
-        
-        # 2. امتیاز کیبوردها
-        kb_score = min(features.keyboards * 2 + features.inline_buttons * 0.5, 10)
-        scores['keyboards'] = kb_score
-        details['keyboards'] = {
-            'regular': features.keyboards,
-            'inline': features.inline_buttons,
-            'score': kb_score
-        }
-        
-        # 3. امتیاز ابزار ادمین
-        admin_score = 0
-        if 'admin' in [c.lower() for c in features.commands]:
-            admin_score += 4
-        if features.database_used:
-            admin_score += 4
-        if any(cmd in features.commands for cmd in ['stats', 'report', 'آمار']):
-            admin_score += 4
-        admin_score = min(admin_score, 12)
-        scores['admin_tools'] = admin_score
-        
-        # 4. امتیاز بازی‌ها
-        game_score = 0
-        if any(word in str(features.commands).lower() for word in ['game', 'play', 'بازی']):
-            game_score = min(features.lines_of_code / 1000 * 8, 8)
-        scores['games'] = game_score
-        
-        # 5. امتیاز مدیریت کاربران
-        user_score = 0
-        if features.database_used:
-            user_score += 6
-        if any(cmd in features.commands for cmd in ['profile', 'user', 'پروفایل']):
-            user_score += 4
-        scores['user_management'] = min(user_score, 10)
-        
-        # 6. امتیاز پیچیدگی فنی
-        tech_score = 0
-        if features.async_code:
-            tech_score += 5
-        if features.lines_of_code > 300:
-            tech_score += 8
-        elif features.lines_of_code > 100:
-            tech_score += 4
-        if features.error_handling:
-            tech_score += 4
+        # ویژگی‌های اضافی
+        if features.is_async:
+            score += 0.1
+        if features.has_database:
+            score += 0.2
+        if features.has_payment:
+            score += 0.2
         if features.has_webhook:
-            tech_score += 3
-        scores['technical'] = min(tech_score, 20)
-        
-        # 7. امتیاز ادغام‌ها
-        int_score = 0
-        if features.database_used:
-            int_score += 5
-        if features.payment_gateway:
-            int_score += 5
+            score += 0.1
         if features.external_apis:
-            int_score += 5
-        scores['integrations'] = min(int_score, 15)
+            score += 0.1
+        if features.has_error_handling:
+            score += 0.1
         
-        # 8. امتیاز کیفیت کد
-        quality_score = features.code_quality * 10
-        scores['code_quality'] = quality_score
-        
-        # امتیاز کل
-        total_score = sum(scores.values())
-        
-        return ScoringResult(
-            feature_scores=scores,
-            total_score=total_score,
-            details=details
-        )
+        return min(score, 1.0)
+
+# ==================== PRICE CALCULATOR ====================
+class PriceCalculator:
+    """ماشین حساب قیمت"""
     
-    async def calculate_price(self, score: float) -> PriceCalculation:
-        """محاسبه قیمت بر اساس امتیاز"""
-        
-        # قیمت پایه
-        base_price = 2_000_000
-        
-        # دریافت نرخ لحظه‌ای دلار
+    def __init__(self):
+        self.dollar_rate = 50000.0
+        self.base_price = 2000000  # 2 میلیون ریال
+    
+    async def get_dollar_rate(self) -> float:
+        """دریافت نرخ دلار"""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(EXCHANGE_RATE_API, timeout=5) as response:
                     if response.status == 200:
                         data = await response.json()
-                        self.dollar_rate = data['rates']['IRR'] / 10
-        except:
-            pass  # استفاده از نرخ پیش‌فرض
+                        return data['rates']['IRR'] / 10  # به ریال
+        except Exception as e:
+            logger.warning(f"Failed to get dollar rate: {e}")
         
-        # ضریب دلار
-        dollar_multiplier = self.dollar_rate / 50000.0
+        return self.dollar_rate
+    
+    async def calculate(self, features: CodeFeature) -> PriceResult:
+        """محاسبه قیمت نهایی"""
         
-        # ضریب امتیاز
-        score_multiplier = score / 50.0
+        # دریافت نرخ دلار
+        self.dollar_rate = await self.get_dollar_rate()
+        
+        # محاسبه امتیاز (0-100)
+        score = self._calculate_score(features)
         
         # محاسبه قیمت
-        raw_price = base_price * score_multiplier * dollar_multiplier
+        price_rials = self._calculate_price(score)
+        price_tomans = int(price_rials / 10)
+        price_usd = price_rials / self.dollar_rate
         
-        # اعمال محدودیت‌ها
-        final_price = max(500_000, min(int(raw_price), 10_000_000))
-        
-        # جزئیات محاسبه
-        breakdown = {
-            'base_price': f"{base_price:,} ریال",
-            'dollar_rate': f"{self.dollar_rate:,.0f} ریال",
-            'dollar_multiplier': f"{dollar_multiplier:.2f}",
-            'score_multiplier': f"{score_multiplier:.2f}",
-            'raw_calculation': f"{raw_price:,.0f} ریال",
-            'final_price': f"{final_price:,} ریال"
+        # جزئیات
+        details = {
+            'score_breakdown': self._get_score_breakdown(features),
+            'dollar_rate': self.dollar_rate,
+            'base_price': self.base_price,
+            'features_summary': self._get_features_summary(features)
         }
         
-        return PriceCalculation(
-            base_price=base_price,
-            dollar_rate=self.dollar_rate,
-            score_multiplier=score_multiplier,
-            final_price=final_price,
-            breakdown=breakdown
+        return PriceResult(
+            score=score,
+            price_rials=price_rials,
+            price_tomans=price_tomans,
+            price_usd=price_usd,
+            details=details
         )
+    
+    def _calculate_score(self, features: CodeFeature) -> float:
+        """محاسبه امتیاز کلی"""
+        score = 0.0
+        
+        # 1. دستورات (تا 20 امتیاز)
+        cmd_score = min(len(features.commands) * 2, 20)
+        score += cmd_score
+        
+        # 2. رابط کاربری (تا 15 امتیاز)
+        ui_score = min(features.keyboards * 3 + features.inline_buttons, 15)
+        score += ui_score
+        
+        # 3. ویژگی‌های فنی (تا 25 امتیاز)
+        tech_score = 0
+        if features.is_async:
+            tech_score += 5
+        if features.has_database:
+            tech_score += 8
+        if features.has_payment:
+            tech_score += 7
+        if features.has_webhook:
+            tech_score += 3
+        if features.has_error_handling:
+            tech_score += 2
+        score += min(tech_score, 25)
+        
+        # 4. پیچیدگی و اندازه (تا 20 امتیاز)
+        size_score = min(features.lines_of_code / 50, 20)
+        score += size_score
+        
+        # 5. کیفیت کد (تا 20 امتیاز)
+        quality_score = min(features.comment_ratio * 40 + features.complexity_score * 10, 20)
+        score += quality_score
+        
+        # محدود کردن به 100
+        return min(score, 100.0)
+    
+    def _calculate_price(self, score: float) -> int:
+        """محاسبه قیمت بر اساس امتیاز"""
+        # ضریب امتیاز (0.5 تا 2.0)
+        score_factor = 0.5 + (score / 100) * 1.5
+        
+        # ضریب دلار
+        dollar_factor = self.dollar_rate / 50000.0
+        
+        # قیمت پایه
+        raw_price = self.base_price * score_factor * dollar_factor
+        
+        # محدودیت‌ها
+        min_price = 500000  # 500 هزار ریال
+        max_price = 10000000  # 10 میلیون ریال
+        
+        price = int(raw_price)
+        price = max(min_price, min(price, max_price))
+        
+        return price
+    
+    def _get_score_breakdown(self, features: CodeFeature) -> Dict[str, float]:
+        """جزئیات امتیازها"""
+        return {
+            'commands': min(len(features.commands) * 2, 20),
+            'ui': min(features.keyboards * 3 + features.inline_buttons, 15),
+            'technical': self._calculate_tech_score(features),
+            'size': min(features.lines_of_code / 50, 20),
+            'quality': min(features.comment_ratio * 40 + features.complexity_score * 10, 20)
+        }
+    
+    def _calculate_tech_score(self, features: CodeFeature) -> float:
+        """محاسبه امتیاز فنی"""
+        score = 0
+        if features.is_async:
+            score += 5
+        if features.has_database:
+            score += 8
+        if features.has_payment:
+            score += 7
+        if features.has_webhook:
+            score += 3
+        if features.has_error_handling:
+            score += 2
+        return min(score, 25)
+    
+    def _get_features_summary(self, features: CodeFeature) -> Dict[str, Any]:
+        """خلاصه ویژگی‌ها"""
+        return {
+            'total_commands': len(features.commands),
+            'keyboards': features.keyboards,
+            'inline_buttons': features.inline_buttons,
+            'lines_of_code': features.lines_of_code,
+            'is_async': features.is_async,
+            'has_database': features.has_database,
+            'has_payment': features.has_payment,
+            'has_admin': features.has_admin,
+            'has_games': features.has_games
+        }
 
 # ==================== BOT HANDLERS ====================
-class BotPriceAnalyzerBot:
-    """ربات اصلی تحلیل قیمت"""
+class TelegramBotAnalyzer:
+    """کلاس اصلی ربات"""
     
     def __init__(self):
-        self.analyzer = TelegramCodeAnalyzer()
-        self.scoring_engine = PriceScoringEngine()
-        self.user_sessions = {}
+        self.analyzer = CodeAnalyzer()
+        self.calculator = PriceCalculator()
+        self.user_data = {}
     
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """دستور /start"""
-        user_id = update.effective_user.id
+        user = update.effective_user
         
-        welcome_text = """
-🎯 **ربات تحلیل‌گر قیمت ربات‌های تلگرام**
+        welcome_text = f"""
+👋 سلام {user.first_name}!
 
-📊 **چگونه کار می‌کند؟**
-1️⃣ فایل Python ربات خود را ارسال کنید
-2️⃣ ربات کد شما را تحلیل می‌کند
-3️⃣ قیمت واقعی ربات محاسبه می‌شود
-4️⃣ گزارش کامل دریافت کنید
+🤖 **به ربات تحلیل‌گر قیمت ربات تلگرام خوش آمدید!**
+
+🎯 **من چکار می‌کنم؟**
+• فایل Python ربات شما را تحلیل می‌کنم
+• قابلیت‌های ربات را شناسایی می‌کنم
+• قیمت منصفانه ربات را محاسبه می‌کنم
+• گزارش کامل ارائه می‌دهم
+
+📁 **نحوه استفاده:**
+1. فایل `.py` ربات خود را ارسال کنید
+2. منتظر تحلیل (۱۰-۲۰ ثانیه)
+3. گزارش قیمت را دریافت کنید
 
 💰 **فرمول قیمت‌گذاری:**
 • قیمت پایه: ۲,۰۰۰,۰۰۰ ریال
-• ضریب کیفیت کد: ۰ تا ۲ برابر
+• ضریب کیفیت کد: ۰.۵ تا ۲ برابر
 • ضریب نرخ دلار: لحظه‌ای
 
-📈 **معیارهای تحلیل:**
-✓ تعداد دستورات و قابلیت‌ها
-✓ کیبوردها و رابط کاربری
-✓ ابزارهای مدیریتی
-✓ پیچیدگی فنی و کیفیت کد
-✓ ادغام با سرویس‌های خارجی
-
-👇 **فایل Python ربات خود را همین حالا ارسال کنید**
+👇 **فایل Python ربات خود را ارسال کنید:**
         """
         
         keyboard = [
-            [InlineKeyboardButton("📋 نمونه گزارش", callback_data="sample")],
-            [InlineKeyboardButton("❓ راهنمای کامل", callback_data="help")],
-            [InlineKeyboardButton("💬 پشتیبانی", url="https://t.me/username")]
+            [InlineKeyboardButton("📊 نمونه تحلیل", callback_data="sample")],
+            [InlineKeyboardButton("ℹ️ راهنمای کامل", callback_data="help")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -423,255 +355,200 @@ class BotPriceAnalyzerBot:
     
     async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """پردازش فایل ارسالی"""
-        user_id = update.effective_user.id
-        
         if not update.message.document:
-            await update.message.reply_text("⚠️ لطفا یک فایل Python (.py) ارسال کنید.")
+            await update.message.reply_text("⚠️ لطفا یک فایل ارسال کنید.")
             return
         
-        document = update.message.document
-        file_name = document.file_name
+        doc = update.message.document
+        file_name = doc.file_name
         
         if not file_name.endswith('.py'):
-            await update.message.reply_text("❌ فقط فایل‌های Python با پسوند .py قابل تحلیل هستند.")
+            await update.message.reply_text("❌ فقط فایل‌های Python با پسوند `.py` قابل تحلیل هستند.")
             return
         
-        # وضعیت پردازش
-        status_msg = await update.message.reply_text("🔍 در حال دانلود و تحلیل فایل...")
+        # پیام وضعیت
+        status_msg = await update.message.reply_text("📥 در حال دانلود فایل...")
         
         try:
             # دانلود فایل
-            file = await document.get_file()
-            file_content_bytes = await file.download_as_bytearray()
-            file_content = file_content_bytes.decode('utf-8', errors='ignore')
+            file = await doc.get_file()
+            file_content = await self._download_file(file)
             
-            # به‌روزرسانی وضعیت
-            await status_msg.edit_text("📊 در حال تحلیل ساختار کد...")
+            if len(file_content) > 500000:  # 500KB limit
+                await status_msg.edit_text("❌ فایل بسیار بزرگ است (حداکثر 500KB)")
+                return
+            
+            await status_msg.edit_text("🔍 در حال تحلیل کد...")
             
             # تحلیل کد
-            features = await self.analyzer.analyze_file(file_content)
+            features = await self.analyzer.analyze(file_content)
             
-            await status_msg.edit_text("🧮 در حال محاسبه امتیاز و قیمت...")
-            
-            # محاسبه امتیاز
-            scoring_result = await self.scoring_engine.calculate_score(features)
+            await status_msg.edit_text("💰 در حال محاسبه قیمت...")
             
             # محاسبه قیمت
-            price_calc = await self.scoring_engine.calculate_price(scoring_result.total_score)
+            result = await self.calculator.calculate(features)
             
             # تولید گزارش
-            report = await self._generate_report(features, scoring_result, price_calc, file_name)
+            report = self._generate_report(features, result, file_name)
             
-            # حذف پیام وضعیت و ارسال گزارش
+            # ارسال گزارش
             await context.bot.delete_message(
                 chat_id=status_msg.chat_id,
                 message_id=status_msg.message_id
             )
             
-            # ارسال گزارش در چند بخش اگر طولانی باشد
-            await self._send_report(update, context, report)
+            await update.message.reply_text(report, parse_mode='Markdown')
             
         except Exception as e:
             logger.error(f"Error: {e}")
-            await update.message.reply_text(f"❌ خطا در پردازش: {str(e)[:200]}")
+            await update.message.reply_text(f"❌ خطا در پردازش: {str(e)[:100]}")
     
-    async def _generate_report(self, features: CodeFeature, 
-                              scoring: ScoringResult, 
-                              price: PriceCalculation,
-                              filename: str) -> str:
-        """تولید گزارش نهایی"""
+    async def _download_file(self, file) -> str:
+        """دانلود فایل"""
+        byte_content = await file.download_as_bytearray()
+        return byte_content.decode('utf-8', errors='ignore')
+    
+    def _generate_report(self, features: CodeFeature, result: PriceResult, filename: str) -> str:
+        """تولید گزارش"""
         
-        # هدر گزارش
-        report = f"""
-📄 **گزارش تحلیل قیمت ربات تلگرام**
-📁 فایل: `{filename}`
-⏰ زمان تحلیل: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📋 **خلاصه فنی:**
-┌ تعداد دستورات: {len(features.commands)} مورد
+        # خلاصه ویژگی‌ها
+        features_text = f"""
+📋 **خلاصه ویژگی‌های شناسایی شده:**
+┌ تعداد دستورات: {len(features.commands)} دستور
 ├ خطوط کد: {features.lines_of_code:,} خط
-├ کیبوردها: {features.keyboards} معمولی + {features.inline_buttons} اینلاین
-├ دیتابیس: {'✅ دارد' if features.database_used else '❌ ندارد'}
-├ درگاه پرداخت: {'✅ دارد' if features.payment_gateway else '❌ ندارد'}
-├ API خارجی: {'✅ دارد' if features.external_apis else '❌ ندارد'}
-├ مدیریت خطا: {'✅ دارد' if features.error_handling else '❌ ندارد'}
-├ معماری: {'✅ Async' if features.async_code else '❌ Sync'}
-└ کیفیت کد: {self._get_quality_stars(features.code_quality)}
-
+├ کیبوردها: {features.keyboards} عدد
+├ دکمه‌های اینلاین: {features.inline_buttons} عدد
+├ معماری: {'✅ Async' if features.is_async else '❌ Sync'}
+├ دیتابیس: {'✅ دارد' if features.has_database else '❌ ندارد'}
+├ درگاه پرداخت: {'✅ دارد' if features.has_payment else '❌ ندارد'}
+├ ابزار ادمین: {'✅ دارد' if features.has_admin else '❌ ندارد'}
+├ بازی/سرگرمی: {'✅ دارد' if features.has_games else '❌ ندارد'}
+└ مدیریت خطا: {'✅ دارد' if features.has_error_handling else '❌ ندارد'}
+        """
+        
+        # امتیازدهی
+        breakdown = result.details['score_breakdown']
+        score_text = f"""
 📊 **امتیازدهی (از ۱۰۰):**
-"""
-        
-        # جدول امتیازها
-        categories = {
-            'commands': 'دستورات',
-            'keyboards': 'کیبوردها',
-            'admin_tools': 'ابزار ادمین',
-            'games': 'بازی‌ها',
-            'user_management': 'مدیریت کاربران',
-            'technical': 'پیچیدگی فنی',
-            'integrations': 'ادغام‌ها',
-            'code_quality': 'کیفیت کد'
-        }
-        
-        for eng, pers in categories.items():
-            score = scoring.feature_scores.get(eng, 0)
-            max_score = 15 if eng in ['commands', 'integrations'] else \
-                       12 if eng == 'admin_tools' else \
-                       10 if eng in ['keyboards', 'user_management', 'code_quality'] else \
-                       8 if eng == 'games' else 20
-            bar = self._create_progress_bar(score, max_score)
-            report += f"┌ {pers}: {score:.1f}/{max_score} {bar}\n"
-        
-        report += f"└ {'─' * 40}\n"
-        report += f"   🏆 **امتیاز کل: {scoring.total_score:.1f}/100**\n\n"
+┌ دستورات: {breakdown['commands']:.1f}/20
+├ رابط کاربری: {breakdown['ui']:.1f}/15
+├ فنی: {breakdown['technical']:.1f}/25
+├ اندازه پروژه: {breakdown['size']:.1f}/20
+└ کیفیت کد: {breakdown['quality']:.1f}/20
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🏆 **امتیاز کل: {result.score:.1f}/100**
+        """
         
         # قیمت‌گذاری
-        price_in_usd = price.final_price / price.dollar_rate
-        price_in_toman = price.final_price / 10
-        
-        report += f"""
+        dollar_rate = result.details['dollar_rate']
+        price_text = f"""
 💰 **تحلیل قیمت:**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-قیمت پایه: {price.base_price:,} ریال
-نرخ دلار: {price.dollar_rate:,.0f} ریال
-ضریب کیفیت: {price.score_multiplier:.2f}x
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+نرخ دلار: {dollar_rate:,.0f} ریال
+قیمت پایه: {result.details['base_price']:,} ریال
 
-💎 **قیمت نهایی پیشنهادی:**
-┌ ریال: **{price.final_price:,} ریال**
-├ تومان: **{price_in_toman:,.0f} تومان**
-└ دلار: **{price_in_usd:,.0f} دلار**
+💎 **قیمت نهایی:**
+┌ ریال: **{result.price_rials:,} ریال**
+├ تومان: **{result.price_tomans:,} تومان**
+└ دلار: **{result.price_usd:,.0f} دلار**
+        """
+        
+        # سطح ربات
+        level_text = self._get_bot_level(result.score)
+        
+        # پیشنهادات
+        suggestions = self._get_suggestions(features)
+        
+        # گزارش نهایی
+        report = f"""
+📄 **گزارش تحلیل ربات تلگرام**
+🔬 فایل: `{filename}`
+⏰ زمان: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-📈 **سطح ربات:**
-"""
-        
-        if scoring.total_score >= 80:
-            report += "🏆 **سطح حرفه‌ای** - ربات کامل با امکانات پیشرفته\n"
-        elif scoring.total_score >= 60:
-            report += "⭐ **سطح متوسط** - ربات کاربردی با قابلیت‌های خوب\n"
-        elif scoring.total_score >= 40:
-            report += "📱 **سطح استاندارد** - ربات پایه با امکانات ضروری\n"
-        else:
-            report += "🛠️ **سطح ساده** - ربات مقدماتی\n"
-        
-        # پیشنهادات بهبود
-        report += "\n🎯 **پیشنهادات برای افزایش قیمت:**\n"
-        suggestions = await self._get_improvement_suggestions(scoring, features)
-        report += suggestions
-        
-        # نکات نهایی
-        report += f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{features_text}
+
+{score_text}
+
+{price_text}
+
+{level_text}
+
+🎯 **پیشنهادات برای بهبود:**
+{suggestions}
+
 📝 **نکات مهم:**
-• این قیمت بر اساس تحلیل خودکار کد محاسبه شده
+• این تحلیل بر اساس کد فعلی ربات است
 • قیمت‌های بازار ممکن است متفاوت باشند
-• کیفیت طراحی UI/UX در این تحلیل لحاظ نشده
-• زمان توسعه و پیچیدگی منطق تجاری محاسبه شده
-
-🤝 **برای سفارش توسعه یا مشاوره بیشتر:**
-@username
+• کیفیت طراحی UI در این تحلیل لحاظ نشده
+• برای سفارش توسعه: @username
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🤖 @{update.effective_user.username if hasattr('update', 'effective_user') else 'BotAnalyzer'}
         """
         
         return report
     
-    def _get_quality_stars(self, quality: float) -> str:
-        """نمایش کیفیت با ستاره"""
-        stars = int(quality * 5)
-        return "⭐" * stars + "☆" * (5 - stars)
+    def _get_bot_level(self, score: float) -> str:
+        """تعیین سطح ربات"""
+        if score >= 80:
+            return "🏆 **سطح: حرفه‌ای** - ربات کامل با امکانات پیشرفته"
+        elif score >= 60:
+            return "⭐ **سطح: متوسط** - ربات کاربردی با قابلیت‌های خوب"
+        elif score >= 40:
+            return "📱 **سطح: استاندارد** - ربات پایه با امکانات ضروری"
+        else:
+            return "🛠️ **سطح: ساده** - ربات مقدماتی یا نمونه"
     
-    def _create_progress_bar(self, value: float, max_value: float, length: int = 10) -> str:
-        """ایجاد نوار پیشرفت"""
-        filled = int(value / max_value * length)
-        return "█" * filled + "░" * (length - filled)
-    
-    async def _get_improvement_suggestions(self, scoring: ScoringResult, features: CodeFeature) -> str:
+    def _get_suggestions(self, features: CodeFeature) -> str:
         """پیشنهادات بهبود"""
         suggestions = []
         
-        if scoring.feature_scores.get('code_quality', 0) < 5:
-            suggestions.append("• ✅ افزودن کامنت و docstring به توابع")
+        if not features.has_error_handling:
+            suggestions.append("• ✅ افزودن مدیریت خطا (try/except)")
         
-        if not features.error_handling:
-            suggestions.append("• ✅ پیاده‌سازی try/except برای مدیریت خطا")
+        if not features.is_async and features.lines_of_code > 100:
+            suggestions.append("• ✅ مهاجرت به Async برای کارایی بهتر")
         
-        if not features.database_used:
-            suggestions.append("• ✅ اضافه کردن دیتابیس برای ذخیره‌سازی داده")
+        if not features.has_database:
+            suggestions.append("• ✅ اضافه کردن دیتابیس برای ذخیره‌سازی")
         
-        if scoring.feature_scores.get('integrations', 0) < 5:
-            suggestions.append("• ✅ اتصال به یک API خارجی یا سرویس وب")
+        if features.comment_ratio < 0.05:
+            suggestions.append("• ✅ افزودن کامنت و مستندات به کد")
         
-        if scoring.feature_scores.get('admin_tools', 0) < 4:
-            suggestions.append("• ✅ ایجاد پنل مدیریت با دستورات ادمین")
-        
-        if not features.async_code:
-            suggestions.append("• ✅ استفاده از Async برای کارایی بهتر")
+        if len(features.commands) < 5:
+            suggestions.append("• ✅ افزایش تعداد دستورات و قابلیت‌ها")
         
         if not suggestions:
             suggestions.append("• 🎉 ربات شما از کیفیت خوبی برخوردار است!")
         
-        return "\n".join(suggestions) + "\n"
+        return "\n".join(suggestions)
     
-    async def _send_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE, report: str):
-        """ارسال گزارش (تقسیم شده اگر طولانی باشد)"""
-        # تلگرام محدودیت 4096 کاراکتر دارد
-        if len(report) <= 4000:
-            await update.message.reply_text(report, parse_mode='Markdown')
-        else:
-            # تقسیم به بخش‌های کوچک‌تر
-            parts = self._split_report(report)
-            for i, part in enumerate(parts, 1):
-                if i == 1:
-                    await update.message.reply_text(part, parse_mode='Markdown')
-                else:
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=part,
-                        parse_mode='Markdown'
-                    )
-    
-    def _split_report(self, report: str, max_length: int = 4000) -> List[str]:
-        """تقسیم گزارش به بخش‌های کوچک"""
-        parts = []
-        current_part = ""
-        
-        for line in report.split('\n'):
-            if len(current_part) + len(line) + 1 > max_length:
-                parts.append(current_part)
-                current_part = line + '\n'
-            else:
-                current_part += line + '\n'
-        
-        if current_part:
-            parts.append(current_part)
-        
-        return parts
-    
-    async def handle_sample(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def sample_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """نمونه تحلیل"""
         query = update.callback_query
         await query.answer()
         
         sample_text = """
-📋 **نمونه گزارش تحلیل:**
+📊 **نمونه گزارش تحلیل:**
 
-🎯 **ربات: ربات فروشگاه آنلاین**
-📊 **امتیاز: ۷۸/۱۰۰**
-💰 **قیمت: ۴,۵۰۰,۰۰۰ ریال**
-
-✅ **قابلیت‌های اصلی:**
-• ۱۵ دستور مختلف
-• کیبوردهای اینلاین پویا
-• سیستم سبد خرید
-• درگاه پرداخت زرین‌پال
-• پنل مدیریت پیشرفته
+🤖 **ربات: فروشگاه آنلاین**
+📁 **ویژگی‌های شناسایی شده:**
+• ۱۲ دستور مختلف
+• ۵ کیبورد اینلاین
+• سیستم پرداخت
 • دیتابیس SQLite
+• پنل ادمین
 
-📈 **برای دریافت تحلیل ربات خود:**
+📈 **امتیاز: ۷۶/۱۰۰**
+💰 **قیمت: ۳,۸۰۰,۰۰۰ ریال**
+
+👇 **برای تحلیل ربات خود:**
 فایل Python ربات را ارسال کنید!
         """
         
         keyboard = [
-            [InlineKeyboardButton("📤 ارسال فایل ربات", callback_data="send_file")]
+            [InlineKeyboardButton("📤 ارسال فایل ربات", callback_data="send")],
+            [InlineKeyboardButton("🏠 برگشت", callback_data="back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -681,43 +558,44 @@ class BotPriceAnalyzerBot:
             parse_mode='Markdown'
         )
     
-    async def handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def help_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """راهنما"""
         query = update.callback_query
         await query.answer()
         
         help_text = """
-📚 **راهنمای کامل ربات تحلیل قیمت**
+📚 **راهنمای کامل ربات تحلیل‌گر**
 
 🎯 **هدف ربات:**
-تحلیل خودکار کد ربات‌های تلگرام و محاسبه قیمت منصفانه
+تحلیل خودکار کد ربات‌های تلگرام و ارائه قیمت منصفانه
 
 📁 **نحوه استفاده:**
-1. فایل Python ربات خود را ارسال کنید
-2. صبر کنید تا تحلیل انجام شود (۱۰-۳۰ ثانیه)
-3. گزارش کامل را دریافت کنید
+1. دستور /start را بزنید
+2. فایل Python ربات را ارسال کنید
+3. منتظر تحلیل باشید (۱۰-۲۰ ثانیه)
+4. گزارش کامل را دریافت کنید
 
 ⚙️ **معیارهای تحلیل:**
-• **دستورات:** تعداد و پیچیدگی دستورات
-• **رابط کاربری:** کیبوردها و دکمه‌ها
-• **مدیریت:** ابزارهای ادمین و مدیریت کاربران
-• **فنی:** کیفیت کد، مدیریت خطا، معماری
-• **ادغام:** دیتابیس، API، پرداخت
+• تعداد و نوع دستورات
+• رابط کاربری (کیبوردها)
+• ویژگی‌های فنی (دیتابیس، پرداخت و...)
+• اندازه و پیچیدگی پروژه
+• کیفیت کدنویسی
 
 💰 **فرمول قیمت:**
 قیمت = (قیمت پایه) × (ضریب کیفیت) × (ضریب دلار)
 
 ⚠️ **محدودیت‌ها:**
-• فقط فایل‌های .py پشتیبانی می‌شوند
-• حداکثر حجم: ۱ مگابایت
-• تحلیل بر اساس کد موجود است
+• فقط فایل‌های .py
+• حداکثر حجم: ۵۰۰KB
+• تحلیل بر اساس کد موجود
 
 ❓ **سوالات متداول:**
 Q: آیا کد من ذخیره می‌شود؟
 A: خیر، تحلیل در لحظه انجام می‌شود.
 
 Q: دقت تحلیل چقدر است؟
-A: حدود ۸۵-۹۵% برای ربات‌های استاندارد
+A: حدود ۸۵-۹۰% برای ربات‌های استاندارد
 
 📞 **پشتیبانی:** @username
         """
@@ -732,40 +610,73 @@ A: حدود ۸۵-۹۵% برای ربات‌های استاندارد
             reply_markup=reply_markup,
             parse_mode='Markdown'
         )
+    
+    async def back_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """برگشت به خانه"""
+        query = update.callback_query
+        await query.answer()
+        await self.start_command(update, context)
 
 # ==================== MAIN APPLICATION ====================
+def setup_handlers(app: Application, bot: TelegramBotAnalyzer):
+    """تنظیم هندلرها"""
+    
+    # Command handlers
+    app.add_handler(CommandHandler("start", bot.start_command))
+    app.add_handler(CommandHandler("help", lambda u, c: bot.help_callback(u, c)))
+    
+    # Document handler
+    app.add_handler(MessageHandler(filters.Document.ALL, bot.handle_document))
+    
+    # Callback handlers
+    app.add_handler(CallbackQueryHandler(bot.sample_callback, pattern="^sample$"))
+    app.add_handler(CallbackQueryHandler(bot.help_callback, pattern="^help$"))
+    app.add_handler(CallbackQueryHandler(bot.back_callback, pattern="^(back|home|send)$"))
+
 async def main():
-    """تابع اصلی اجرای ربات"""
+    """تابع اصلی"""
+    
+    if not TOKEN:
+        logger.error("❌ BOT_TOKEN not set!")
+        return
     
     # ایجاد اپلیکیشن
     app = Application.builder().token(TOKEN).build()
     
-    # ایجاد نمونه ربات
-    bot_analyzer = BotPriceAnalyzerBot()
+    # ایجاد ربات
+    bot = TelegramBotAnalyzer()
     
-    # ثبت هندلرها
-    app.add_handler(CommandHandler("start", bot_analyzer.start))
-    app.add_handler(CommandHandler("help", bot_analyzer.handle_help))
-    app.add_handler(MessageHandler(filters.Document.ALL, bot_analyzer.handle_document))
-    app.add_handler(CallbackQueryHandler(bot_analyzer.handle_sample, pattern="^sample$"))
-    app.add_handler(CallbackQueryHandler(bot_analyzer.handle_help, pattern="^help$"))
+    # تنظیم هندلرها
+    setup_handlers(app, bot)
     
     # راه‌اندازی
     if WEBHOOK_URL:
-        # Webhook برای Render
+        # Webhook mode for Render
         await app.initialize()
         await app.start()
+        await app.bot.set_webhook(f"{WEBHOOK_URL}/{TOKEN}")
         
-        # تنظیم webhook
-        await app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+        logger.info(f"✅ Bot started with webhook: {WEBHOOK_URL}")
         
-        # نگه‌داشتن ربات فعال
-        print(f"🤖 Bot is running with webhook at {WEBHOOK_URL}")
+        # Keep running
         await asyncio.Event().wait()
     else:
-        # Polling برای توسعه
-        print("🤖 Bot is running in polling mode...")
+        # Polling mode for development
+        logger.info("🤖 Bot started in polling mode...")
         await app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Check Python version
+    import sys
+    if sys.version_info < (3, 7):
+        print("❌ Python 3.7+ required!")
+        sys.exit(1)
+    
+    # Run the bot
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Bot stopped by user")
+    except Exception as e:
+        print(f"❌ Fatal error: {e}")
+        sys.exit(1)
