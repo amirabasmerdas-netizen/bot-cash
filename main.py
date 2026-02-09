@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🤖 Telegram Bot Price Analyzer - Professional Output
-Version: 15.0 - Professional Report Format
+🤖 Telegram Bot Price Analyzer - Professional Version
+Version: 16.0 - Fixed Event Loop
 """
 
 import os
@@ -12,7 +12,7 @@ import time
 import asyncio
 import logging
 import threading
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
@@ -20,9 +20,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -59,7 +56,8 @@ class HealthHandler(BaseHTTPRequestHandler):
             response = json.dumps({
                 "status": "online",
                 "service": "bot-price-analyzer",
-                "version": "15.0"
+                "version": "16.0",
+                "time": datetime.now().strftime("%H:%M:%S")
             })
             self.wfile.write(response.encode())
         else:
@@ -67,10 +65,10 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
     
     def log_message(self, format, *args):
-        pass
+        pass  # Disable HTTP logs
 
 def run_http_server():
-    """اجرای HTTP Server"""
+    """اجرای HTTP Server در thread جداگانه"""
     try:
         server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
         logger.info(f"✅ HTTP Server running on port {PORT}")
@@ -80,9 +78,8 @@ def run_http_server():
 
 # ==================== PROFESSIONAL ANALYZER ====================
 class ProfessionalAnalyzer:
-    """تحلیل‌گر حرفه‌ای کد"""
+    """تحلیل‌گر حرفه‌ای"""
     
-    # انواع ربات‌ها با توضیحات و محدوده قیمت
     BOT_TYPES = [
         {
             "name": "👑 مدیریت گروه",
@@ -91,7 +88,7 @@ class ProfessionalAnalyzer:
             "price_range": (1_500_000, 4_000_000)
         },
         {
-            "name": "🛍️ فروشگاه آنلاین",
+            "name": "🛍️ فروشگاه آنلاین", 
             "description": "ربات فروش محصولات و خدمات با درگاه پرداخت",
             "keywords": ["shop", "store", "فروش", "خرید", "محصول", "سبد خرید", "payment"],
             "price_range": (3_000_000, 10_000_000)
@@ -123,7 +120,7 @@ class ProfessionalAnalyzer:
     ]
     
     @staticmethod
-    def analyze_code(code: str) -> Dict[str, Any]:
+    def analyze(code: str) -> Dict[str, Any]:
         """تحلیل کامل کد"""
         lines = code.split('\n')
         total_lines = len(lines)
@@ -137,19 +134,18 @@ class ProfessionalAnalyzer:
                 "comment_lines": len(comment_lines),
                 "comment_ratio": len(comment_lines) / max(len(code_lines), 1)
             },
-            "detected_type": ProfessionalAnalyzer._detect_bot_type(code),
+            "detected_type": ProfessionalAnalyzer._detect_type(code),
             "features": ProfessionalAnalyzer._extract_features(code),
-            "technical": ProfessionalAnalyzer._analyze_technical(code),
             "score": 0
         }
         
-        # محاسبه امتیاز نهایی
+        # محاسبه امتیاز
         analysis["score"] = ProfessionalAnalyzer._calculate_score(analysis)
         
         return analysis
     
     @staticmethod
-    def _detect_bot_type(code: str) -> Dict[str, Any]:
+    def _detect_type(code: str) -> Dict[str, Any]:
         """تشخیص نوع ربات"""
         code_lower = code.lower()
         best_match = None
@@ -160,7 +156,6 @@ class ProfessionalAnalyzer:
             for keyword in bot_type["keywords"]:
                 if keyword in code_lower:
                     score += 10
-                    # امتیاز اضافی برای تکرار کلمات کلیدی
                     score += min(code_lower.count(keyword) * 2, 10)
             
             if score > best_score:
@@ -176,7 +171,6 @@ class ProfessionalAnalyzer:
                 "price_range": best_match["price_range"]
             }
         
-        # نوع پیش‌فرض
         return {
             "name": "⚙️ سفارشی",
             "description": "ربات با قابلیت‌های خاص و اختصاصی",
@@ -186,11 +180,11 @@ class ProfessionalAnalyzer:
     
     @staticmethod
     def _extract_features(code: str) -> List[str]:
-        """استخراج ویژگی‌های ربات"""
+        """استخراج ویژگی‌ها"""
         features = []
         code_lower = code.lower()
         
-        # رابط کاربری
+        # UI Features
         if 'InlineKeyboardMarkup' in code:
             features.append("کیبورد اینلاین")
         if 'InlineKeyboardButton' in code:
@@ -200,64 +194,34 @@ class ProfessionalAnalyzer:
         if 'CallbackQueryHandler' in code:
             features.append("دکمه‌های تعاملی")
         
-        # قابلیت‌ها
+        # Functionality
         if 'CommandHandler' in code:
             features.append("دستورات سفارشی")
         if 'ConversationHandler' in code:
             features.append("مکالمه چندمرحله‌ای")
         
-        # فنی
+        # Technical
         if 'async def' in code:
             features.append("Async Programming")
         if 'class ' in code:
             features.append("برنامه‌نویسی شی‌گرا")
         if 'try:' in code and 'except:' in code:
             features.append("مدیریت خطا")
-        if 'logging' in code_lower:
-            features.append("سیستم لاگ")
         
-        # ادغام‌ها
-        if any(db in code_lower for db in ['sqlite', 'mysql', 'postgres', 'database', 'db']):
+        # Integrations
+        if any(db in code_lower for db in ['sqlite', 'mysql', 'postgres', 'database']):
             features.append("دیتابیس")
         if any(pay in code_lower for pay in ['zarinpal', 'idpay', 'nextpay', 'payment', 'پرداخت']):
             features.append("درگاه پرداخت")
-        if 'requests' in code_lower or 'httpx' in code_lower or 'aiohttp' in code_lower:
-            features.append("API خارجی")
         
-        # زمان‌بندی
-        if 'JobQueue' in code or 'run_repeating' in code or 'run_once' in code:
-            features.append("زمان‌بندی خودکار")
-        
-        return list(set(features))  # حذف موارد تکراری
-    
-    @staticmethod
-    def _analyze_technical(code: str) -> Dict[str, Any]:
-        """تحلیل فنی کد"""
-        # ساختار کد
-        class_count = len(re.findall(r'class\s+\w+', code))
-        function_count = len(re.findall(r'(async\s+)?def\s+\w+', code))
-        
-        # imports
-        imports = re.findall(r'from\s+(\S+)\s+import|import\s+(\S+)', code)
-        
-        # کیفیت
-        has_error_handling = len(re.findall(r'try:', code)) > 0
-        has_logging = 'logging' in code.lower()
-        
-        return {
-            "class_count": class_count,
-            "function_count": function_count,
-            "import_count": len(imports),
-            "has_error_handling": has_error_handling,
-            "has_logging": has_logging
-        }
+        return list(set(features))
     
     @staticmethod
     def _calculate_score(analysis: Dict[str, Any]) -> int:
-        """محاسبه امتیاز (0-100)"""
+        """محاسبه امتیاز"""
         score = 0
         
-        # 1. اندازه پروژه (تا 25 امتیاز)
+        # Size (up to 25)
         loc = analysis["file_info"]["code_lines"]
         if loc > 500:
             score += 25
@@ -270,61 +234,51 @@ class ProfessionalAnalyzer:
         elif loc > 50:
             score += 5
         
-        # 2. نوع ربات (تا 15 امتیاز)
-        confidence = analysis["detected_type"]["confidence"]
-        score += int(confidence * 15)
+        # Type confidence (up to 15)
+        score += int(analysis["detected_type"]["confidence"] * 15)
         
-        # 3. ویژگی‌ها (تا 30 امتیاز)
-        feature_count = len(analysis["features"])
-        score += min(feature_count * 3, 30)
+        # Features (up to 30)
+        score += min(len(analysis["features"]) * 3, 30)
         
-        # 4. کیفیت کد (تا 20 امتیاز)
-        tech = analysis["technical"]
-        if tech["has_error_handling"]:
-            score += 5
-        if tech["has_logging"]:
-            score += 5
+        # Quality (up to 20)
         if analysis["file_info"]["comment_ratio"] > 0.1:
-            score += 5
+            score += 10
         elif analysis["file_info"]["comment_ratio"] > 0.05:
-            score += 3
-        
-        # 5. ساختار (تا 10 امتیاز)
-        if tech["class_count"] > 0:
-            score += min(tech["class_count"] * 2, 5)
-        if tech["function_count"] > 10:
             score += 5
-        elif tech["function_count"] > 5:
-            score += 3
+        
+        # Structure (up to 10)
+        if 'برنامه‌نویسی شی‌گرا' in analysis["features"]:
+            score += 5
+        if 'مدیریت خطا' in analysis["features"]:
+            score += 5
         
         return min(score, 100)
 
 # ==================== PRICE CALCULATOR ====================
-class ProfessionalPriceCalculator:
-    """ماشین حساب قیمت حرفه‌ای"""
+class PriceCalculator:
+    """ماشین حساب قیمت"""
     
     @staticmethod
-    def calculate_price(analysis: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate(analysis: Dict[str, Any]) -> Dict[str, Any]:
         """محاسبه قیمت نهایی"""
         score = analysis["score"]
         bot_type = analysis["detected_type"]
         
-        # قیمت پایه از محدوده نوع
+        # قیمت پایه
         type_min, type_max = bot_type["price_range"]
         type_base = (type_min + type_max) // 2
         
-        # ضریب امتیاز (0.5 تا 2)
+        # ضریب امتیاز
         score_factor = 0.5 + (score / 100) * 1.5
         
         # ضریب پیچیدگی
         tech_factor = 1.0
-        tech = analysis["technical"]
-        if tech["has_error_handling"]:
+        if 'مدیریت خطا' in analysis["features"]:
             tech_factor += 0.1
-        if tech["has_logging"]:
-            tech_factor += 0.1
-        if len(analysis["features"]) > 5:
-            tech_factor += 0.1
+        if 'دیتابیس' in analysis["features"]:
+            tech_factor += 0.15
+        if 'درگاه پرداخت' in analysis["features"]:
+            tech_factor += 0.2
         
         # ضریب اندازه
         loc = analysis["file_info"]["code_lines"]
@@ -336,7 +290,7 @@ class ProfessionalPriceCalculator:
         elif loc > 200:
             size_factor = 1.1
         
-        # محاسبه قیمت
+        # محاسبه نهایی
         raw_price = type_base * score_factor * tech_factor * size_factor
         
         # محدودیت‌ها
@@ -345,11 +299,11 @@ class ProfessionalPriceCalculator:
         price_rials = max(min_price, min(int(raw_price), max_price))
         
         # تبدیل ارز
-        dollar_rate = 50_000  # نرخ دلار
+        dollar_rate = 50_000
         price_tomans = price_rials // 10
         price_usd = price_rials / dollar_rate
         
-        # تعیین سطح
+        # سطح
         if score >= 80:
             level = "🏆 حرفه‌ای"
         elif score >= 60:
@@ -372,11 +326,11 @@ class ProfessionalPriceCalculator:
 
 # ==================== REPORT GENERATOR ====================
 class ReportGenerator:
-    """تولید کننده گزارش حرفه‌ای"""
+    """تولید گزارش"""
     
     @staticmethod
-    def generate_report(filename: str, analysis: Dict[str, Any], price: Dict[str, Any]) -> str:
-        """تولید گزارش با فرمت دلخواه"""
+    def generate(filename: str, analysis: Dict[str, Any], price: Dict[str, Any]) -> str:
+        """تولید گزارش نهایی"""
         now = datetime.now().strftime("%Y/%m/%d %H:%M")
         file_info = analysis["file_info"]
         bot_type = analysis["detected_type"]
@@ -413,7 +367,7 @@ class ReportGenerator:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🏆 امتیاز کلی: **{price['score']}/100**
 🎯 سطح: **{price['level']}**
-🎯 نوع: {price['type_name'].split()[-1]}  # فقط نام بدون emoji
+🎯 نوع: {price['type_name'].split()[-1]}
 
 💎 **قیمت نهایی:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -447,45 +401,36 @@ class ReportGenerator:
 • برای سفارش توسعه با @username تماس بگیرید
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤖 ربات تحلیل‌گر قیمت - نسخه ۱۵.۰
+🤖 ربات تحلیل‌گر قیمت - نسخه ۱۶.۰
         """
         
         return report
 
 # ==================== BOT HANDLERS ====================
-class ProfessionalBot:
-    """ربات حرفه‌ای"""
+class BotHandler:
+    """Handler اصلی ربات"""
     
     def __init__(self):
         self.analyzer = ProfessionalAnalyzer()
-        self.calculator = ProfessionalPriceCalculator()
-        self.report_gen = ReportGenerator()
-        self.processing_users = set()
-        self.last_activity = time.time()
+        self.calculator = PriceCalculator()
+        self.reporter = ReportGenerator()
+        self.processing = set()
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """دستور /start"""
-        self.last_activity = time.time()
-        
         text = """
 🤖 **ربات تحلیل‌گر حرفه‌ای قیمت ربات تلگرام**
 
-✨ **ویژگی‌های جدید:**
-• تحلیل کامل کد با دقت بالا
+✨ **ویژگی‌ها:**
+• تحلیل کامل کد Python
 • تشخیص هوشمند نوع ربات
 • گزارش حرفه‌ای با فرمت زیبا
 • قیمت‌گذاری منصفانه و شفاف
 
 📊 **نحوه استفاده:**
 ۱. فایل `.py` ربات خود را ارسال کنید
-۲. منتظر تحلیل پیشرفته باشید (۱۰-۲۰ ثانیه)
-۳. گزارش کامل حرفه‌ای را دریافت کنید
-
-🎯 **آنالیز می‌شود:**
-• نوع و کاربرد ربات
-• ویژگی‌های شناسایی شده
-• کیفیت کد و ساختار فنی
-• قیمت دقیق و منصفانه
+۲. منتظر تحلیل باشید (۱۰-۲۰ ثانیه)
+۳. گزارش کامل را دریافت کنید
 
 👇 **فایل ربات خود را همین حالا ارسال کنید!**
         """
@@ -498,11 +443,10 @@ class ProfessionalBot:
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """پردازش فایل ارسالی"""
+        """پردازش فایل"""
         user_id = update.effective_user.id
-        self.last_activity = time.time()
         
-        if user_id in self.processing_users:
+        if user_id in self.processing:
             await update.message.reply_text("⏳ در حال پردازش درخواست قبلی...")
             return
         
@@ -517,13 +461,13 @@ class ProfessionalBot:
             await update.message.reply_text("❌ فقط فایل‌های Python با پسوند `.py`")
             return
         
-        self.processing_users.add(user_id)
+        self.processing.add(user_id)
         
         try:
             # پیام وضعیت
             status_msg = await update.message.reply_text("📥 در حال دریافت فایل...")
             
-            # دانلود فایل
+            # دانلود
             file = await doc.get_file()
             content_bytes = await file.download_as_bytearray()
             
@@ -533,18 +477,18 @@ class ProfessionalBot:
             
             content = content_bytes.decode('utf-8', errors='ignore')
             
-            await status_msg.edit_text("🔍 تحلیل نوع ربات و ویژگی‌ها...")
+            await status_msg.edit_text("🔍 تحلیل کد...")
             
-            # تحلیل کامل
-            analysis = self.analyzer.analyze_code(content)
+            # تحلیل
+            analysis = self.analyzer.analyze(content)
             
             await status_msg.edit_text("💰 محاسبه قیمت...")
             
-            # محاسبه قیمت
-            price_result = self.calculator.calculate_price(analysis)
+            # قیمت
+            price_result = self.calculator.calculate(analysis)
             
-            # تولید گزارش
-            report = self.report_gen.generate_report(file_name, analysis, price_result)
+            # گزارش
+            report = self.reporter.generate(file_name, analysis, price_result)
             
             # حذف پیام وضعیت
             await context.bot.delete_message(
@@ -554,35 +498,32 @@ class ProfessionalBot:
             
             # ارسال گزارش
             await update.message.reply_text(report, parse_mode='Markdown')
-            logger.info(f"✅ Report sent for {file_name}")
             
         except Exception as e:
-            logger.error(f"❌ Error: {e}")
-            await update.message.reply_text("❌ خطا در پردازش فایل. لطفا دوباره تلاش کنید.")
+            logger.error(f"Error: {e}")
+            await update.message.reply_text("❌ خطا در پردازش فایل")
         
         finally:
-            self.processing_users.discard(user_id)
+            self.processing.discard(user_id)
     
-    async def sample_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def sample(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """نمونه گزارش"""
         query = update.callback_query
         await query.answer()
         
-        sample = f"""
-📄 **نمونه گزارش تحلیل:**
+        text = """
+📋 **نمونه گزارش:**
 
-🎯 **تشخیص:** 👑 مدیریت گروه (۸۵٪ اطمینان)
+🎯 **تشخیص:** 👑 مدیریت گروه
 ✨ **ویژگی‌ها:**
 • ✅ کیبورد اینلاین
-• ✅ دکمه‌های تعاملی  
+• ✅ دستورات سفارشی
 • ✅ مدیریت خطا
-• ✅ دیتابیس SQLite
-• ✅ زمان‌بندی خودکار
+• ✅ دیتابیس
 
 💰 **قیمت:** ۳,۸۰۰,۰۰۰ ریال
 
-👇 **برای تحلیل ربات خود:**
-فایل Python ربات را ارسال کنید!
+👇 **ربات خود را تحلیل کنید!**
         """
         
         keyboard = [
@@ -590,75 +531,72 @@ class ProfessionalBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await query.edit_message_text(sample, reply_markup=reply_markup, parse_mode='Markdown')
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
 
-# ==================== KEEP ALIVE ====================
-def activity_monitor(bot: ProfessionalBot):
-    """مانیتور فعالیت برای جلوگیری از sleep"""
-    while True:
-        time_since_activity = time.time() - bot.last_activity
-        
-        if time_since_activity > 300:  # 5 دقیقه بی‌فعالی
-            logger.info("🔄 Activity monitor: No activity for 5+ minutes")
-            bot.last_activity = time.time()  # Reset
-        
-        time.sleep(60)  # هر 1 دقیقه چک کن
-
-# ==================== MAIN ====================
-def main():
-    """تابع اصلی"""
+# ==================== MAIN ASYNC FUNCTION ====================
+async def run_bot():
+    """اجرای اصلی ربات"""
     logger.info("=" * 60)
-    logger.info("🤖 Telegram Bot Price Analyzer - Professional v15.0")
+    logger.info("🤖 Telegram Bot Price Analyzer - Professional v16.0")
     logger.info("=" * 60)
-    
-    # شروع HTTP Server
-    http_thread = threading.Thread(target=run_http_server, daemon=True)
-    http_thread.start()
-    logger.info(f"✅ HTTP Server started on port {PORT}")
     
     try:
-        # ایجاد اپلیکیشن تلگرام
-        application = Application.builder().token(TOKEN).build()
+        # پاکسازی قبل از شروع
+        from telegram import Bot
+        temp_bot = Bot(token=TOKEN)
+        await temp_bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Webhook cleared")
+        await asyncio.sleep(2)
+        
+        # ایجاد اپلیکیشن
+        app = Application.builder().token(TOKEN).build()
         
         # ایجاد هندلر
-        bot = ProfessionalBot()
+        handler = BotHandler()
         
         # ثبت هندلرها
-        application.add_handler(CommandHandler("start", bot.start))
-        application.add_handler(CommandHandler("help", bot.start))
-        application.add_handler(MessageHandler(filters.Document.ALL, bot.handle_document))
-        application.add_handler(CallbackQueryHandler(bot.sample_report, pattern="^sample$"))
-        application.add_handler(CallbackQueryHandler(bot.start, pattern="^send$"))
+        app.add_handler(CommandHandler("start", handler.start))
+        app.add_handler(CommandHandler("help", handler.start))
+        app.add_handler(MessageHandler(filters.Document.ALL, handler.handle_document))
+        app.add_handler(CallbackQueryHandler(handler.sample, pattern="^sample$"))
+        app.add_handler(CallbackQueryHandler(handler.start, pattern="^send$"))
         
         logger.info("✅ Bot setup completed")
         
-        # شروع activity monitor
-        monitor_thread = threading.Thread(target=activity_monitor, args=(bot,), daemon=True)
-        monitor_thread.start()
-        logger.info("✅ Activity monitor started")
-        
-        # پاکسازی قبل از شروع
-        async def cleanup():
-            from telegram import Bot
-            temp_bot = Bot(token=TOKEN)
-            await temp_bot.delete_webhook(drop_pending_updates=True)
-            await asyncio.sleep(2)
-        
-        asyncio.run(cleanup())
-        
         # شروع polling
-        logger.info("🚀 Starting bot polling...")
-        application.run_polling(
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling(
             drop_pending_updates=True,
             timeout=30,
             poll_interval=0.5,
             allowed_updates=["message", "callback_query"]
         )
         
+        logger.info("✅ Bot is RUNNING and ready!")
+        logger.info("🎯 Waiting for files...")
+        
+        # نگه داشتن برنامه
+        await asyncio.Event().wait()
+        
+    except Exception as e:
+        logger.error(f"❌ Bot error: {e}")
+
+# ==================== MAIN FUNCTION ====================
+def main():
+    """تابع اصلی"""
+    # شروع HTTP Server در thread جداگانه
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
+    logger.info(f"✅ HTTP Server started on port {PORT}")
+    
+    # اجرای ربات
+    try:
+        asyncio.run(run_bot())
     except KeyboardInterrupt:
         logger.info("👋 Bot stopped by user")
     except Exception as e:
-        logger.error(f"❌ Error: {e}")
+        logger.error(f"❌ Main error: {e}")
 
 if __name__ == "__main__":
     main()
