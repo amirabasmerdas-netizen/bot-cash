@@ -1,22 +1,15 @@
 services:
   - type: web
-    name: bot-auto-reconnect
+    name: bot-professional-v16
     env: python
     region: frankfurt
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
+    buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
         sync: false
-        value: "7667947505:AAHoaSzSEeB6okKIpuwitnID4SEmbko71d0"
-      - key: RENDER_EXTERNAL_URL
-        sync: false
-        value: "https://bot-cash.onrender.com"
       - key: PORT
         value: 8443
     healthCheckPath: /health
-    healthCheckTimeout: 30
     autoDeploy: true
     plan: free
