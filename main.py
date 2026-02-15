@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║                    🤖 TELEGRAM BOT PRICE ANALYZER PRO MAX                      ║
-║                         Version: 20.0 - Enterprise Edition                     ║
-║                    Powered by Advanced AI & Machine Learning                   ║
+║              🤖 TELEGRAM BOT PRICE ANALYZER - ULTIMATE EDITION                 ║
+║                         Version: 21.0 - Conflict Free                          ║
+║                    With Auto-Restart & Smart Recovery                          ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -14,35 +14,30 @@ import ast
 import json
 import time
 import uuid
-import hashlib
 import asyncio
 import logging
 import threading
+import signal
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# ==================== FIXED LOGGING ====================
-# ساده‌ترین و مطمئن‌ترین روش logging
+# ==================== SIMPLE LOGGING ====================
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
-
 logger = logging.getLogger(__name__)
-logger.info("✅ Logging system initialized")
 
 # ==================== CONFIGURATION ====================
 TOKEN = os.environ.get("BOT_TOKEN", "")
 PORT = int(os.environ.get("PORT", 8443))
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
-DEBUG = os.environ.get("DEBUG", "false").lower() == "true"
+MAX_RETRIES = 10
+RETRY_DELAY = 10  # seconds
 
 if not TOKEN:
-    logger.critical("❌ BOT_TOKEN is not set! Exiting...")
+    logger.critical("❌ BOT_TOKEN is not set!")
     sys.exit(1)
 
 # ==================== TELEGRAM IMPORTS ====================
@@ -57,139 +52,96 @@ try:
         filters
     )
     from telegram.error import Conflict, TimedOut, NetworkError
-    logger.info("✅ Telegram library imported successfully")
+    logger.info("✅ Telegram library imported")
 except ImportError as e:
     logger.critical(f"❌ Import error: {e}")
     sys.exit(1)
 
-# ==================== SIMPLE ENUMS ====================
-class BotCategory:
-    ECOMMERCE = "🛍️ فروشگاه آنلاین"
-    EDUCATIONAL = "📚 آموزشی و درسی"
-    GROUP_MANAGEMENT = "👑 مدیریت گروه"
-    ENTERTAINMENT = "🎮 سرگرمی و بازی"
-    NEWS = "📰 اخبار و اطلاع‌رسانی"
-    UTILITY = "⚙️ سرویس و ابزار"
-    FINANCIAL = "💰 مالی و حسابداری"
-    CUSTOM = "✨ سفارشی"
-
-# ==================== SIMPLE DATA MODEL ====================
-class BotAnalysis:
-    """مدل ساده و کارآمد"""
-    
-    def __init__(self, filename=""):
-        self.id = str(uuid.uuid4())[:8]
-        self.filename = filename
-        self.timestamp = datetime.now()
-        
-        # Basic info
-        self.total_lines = 0
-        self.code_lines = 0
-        self.comment_lines = 0
-        
-        # Features
-        self.features = []
-        self.technologies = []
-        
-        # Bot type
-        self.category = BotCategory.CUSTOM
-        self.confidence = 0.0
-        self.reasons = []
-        
-        # Price
-        self.base_price = 0
-        self.final_price = 0
-        self.price_factors = {}
-        
-        # Security
-        self.security_issues = []
-        self.security_score = 100
-
-# ==================== AST ANALYZER ====================
-class ASTAnalyzer:
-    """تحلیل‌گر AST ساده"""
-    
-    @staticmethod
-    def analyze(code: str) -> Dict:
-        try:
-            tree = ast.parse(code)
-            functions = []
-            classes = []
-            imports = []
-            async_functions = []
-            
-            for node in ast.walk(tree):
-                if isinstance(node, ast.FunctionDef):
-                    functions.append(node.name)
-                elif isinstance(node, ast.AsyncFunctionDef):
-                    async_functions.append(node.name)
-                elif isinstance(node, ast.ClassDef):
-                    classes.append(node.name)
-                elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                    for alias in node.names:
-                        imports.append(alias.name)
-            
-            return {
-                "functions": functions,
-                "classes": classes,
-                "imports": imports,
-                "async_functions": async_functions,
-                "has_error_handling": 'try' in code
+# ==================== HTTP SERVER ====================
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ['/', '/health', '/ping']:
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = {
+                "status": "online",
+                "service": "bot-price-analyzer",
+                "version": "21.0",
+                "time": datetime.now().isoformat()
             }
-        except:
-            return {}
+            self.wfile.write(json.dumps(response).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def log_message(self, format, *args):
+        pass
+
+def run_http_server():
+    """HTTP server in separate thread"""
+    try:
+        server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
+        logger.info(f"✅ HTTP Server running on port {PORT}")
+        server.serve_forever()
+    except Exception as e:
+        logger.error(f"❌ HTTP Server error: {e}")
 
 # ==================== BOT DETECTOR ====================
 class BotDetector:
-    """تشخیص‌گر ساده و دقیق"""
+    """تشخیص نوع ربات"""
     
-    CATEGORY_KEYWORDS = {
-        BotCategory.ECOMMERCE: {
-            "primary": ["سبد خرید", "پرداخت", "محصول", "فروش", "قیمت", "خرید", "zarinpal", "idpay"],
-            "secondary": ["سفارش", "موجودی", "تخفیف"]
+    CATEGORIES = {
+        "🛍️ فروشگاه آنلاین": {
+            "primary": ["سبد خرید", "پرداخت", "محصول", "فروش", "خرید", "zarinpal", "idpay"],
+            "secondary": ["سفارش", "قیمت", "تخفیف"],
+            "base_price": 5_000_000
         },
-        BotCategory.EDUCATIONAL: {
-            "primary": ["آزمون", "سوال", "نمره", "آموزش", "دوره", "quiz", "exam"],
-            "secondary": ["تمرین", "پاسخ", "کلاس"]
+        "📚 آموزشی": {
+            "primary": ["آزمون", "سوال", "نمره", "آموزش", "quiz", "exam"],
+            "secondary": ["تمرین", "پاسخ", "کلاس"],
+            "base_price": 3_500_000
         },
-        BotCategory.GROUP_MANAGEMENT: {
+        "👑 مدیریت گروه": {
             "primary": ["اخراج", "مسدود", "اخطار", "فیلتر", "kick", "ban", "warn"],
-            "secondary": ["خوش آمد", "اعضا", "مدیریت"]
+            "secondary": ["خوش آمد", "اعضا"],
+            "base_price": 2_500_000
         },
-        BotCategory.ENTERTAINMENT: {
-            "primary": ["بازی", "حدس", "شانس", "مسابقه", "game", "play"],
-            "secondary": ["امتیاز", "لول", "برنده"]
+        "🎮 سرگرمی": {
+            "primary": ["بازی", "حدس", "شانس", "مسابقه", "game"],
+            "secondary": ["امتیاز", "لول", "برنده"],
+            "base_price": 3_000_000
+        },
+        "✨ سفارشی": {
+            "primary": [],
+            "secondary": [],
+            "base_price": 4_000_000
         }
     }
     
     @staticmethod
-    def detect(code: str) -> Tuple[str, float, List[str]]:
+    def detect(code: str) -> Tuple[str, float, int]:
         code_lower = code.lower()
         scores = {}
-        reasons = []
         
-        for category, keywords in BotDetector.CATEGORY_KEYWORDS.items():
+        for name, data in BotDetector.CATEGORIES.items():
             score = 0
-            for kw in keywords["primary"]:
+            for kw in data["primary"]:
                 if kw.lower() in code_lower:
-                    count = code_lower.count(kw.lower())
-                    score += count * 10
-                    if count > 0:
-                        reasons.append(f"کلمه کلیدی '{kw}' ({count} بار)")
-            
-            for kw in keywords.get("secondary", []):
+                    score += 20
+            for kw in data["secondary"]:
                 if kw.lower() in code_lower:
-                    score += code_lower.count(kw.lower()) * 5
-            
+                    score += 5
             if score > 0:
-                scores[category] = score
+                scores[name] = score
         
         if scores:
             best = max(scores.items(), key=lambda x: x[1])
-            confidence = min(best[1] / 100, 0.95)
-            return best[0], confidence, reasons[:3]
+            confidence = min(best[1] / 50, 0.95)
+            base_price = BotDetector.CATEGORIES[best[0]]["base_price"]
+            return best[0], confidence, base_price
         
-        return BotCategory.CUSTOM, 0.3, ["الگوی خاصی یافت نشد"]
+        return "✨ سفارشی", 0.3, 4_000_000
 
 # ==================== FEATURE EXTRACTOR ====================
 class FeatureExtractor:
@@ -201,13 +153,12 @@ class FeatureExtractor:
         (r"CallbackQueryHandler", "دکمه‌های تعاملی"),
         (r"ConversationHandler", "مکالمه چندمرحله‌ای"),
         (r"async def", "Async Programming"),
-        (r"class ", "برنامه‌نویسی شی‌گرا"),
+        (r"class ", "شی‌گرایی"),
         (r"try:.*except", "مدیریت خطا"),
         (r"logging", "سیستم لاگ"),
         (r"sqlite|mysql|postgres", "دیتابیس"),
         (r"zarinpal|idpay|payment", "درگاه پرداخت"),
-        (r"requests|httpx", "API خارجی"),
-        (r"job_queue", "زمان‌بندی خودکار")
+        (r"requests|httpx", "API خارجی")
     ]
     
     @staticmethod
@@ -220,139 +171,84 @@ class FeatureExtractor:
 
 # ==================== PRICE CALCULATOR ====================
 class PriceCalculator:
-    """محاسبه قیمت هوشمند"""
-    
-    BASE_PRICES = {
-        BotCategory.ECOMMERCE: 5_000_000,
-        BotCategory.EDUCATIONAL: 3_500_000,
-        BotCategory.GROUP_MANAGEMENT: 2_500_000,
-        BotCategory.ENTERTAINMENT: 3_000_000,
-        BotCategory.NEWS: 2_000_000,
-        BotCategory.UTILITY: 2_500_000,
-        BotCategory.FINANCIAL: 6_000_000,
-        BotCategory.CUSTOM: 4_000_000
-    }
+    """محاسبه قیمت"""
     
     @staticmethod
-    def calculate(analysis: BotAnalysis) -> BotAnalysis:
-        # قیمت پایه
-        base = PriceCalculator.BASE_PRICES.get(analysis.category, 4_000_000)
-        analysis.base_price = base
-        analysis.price_factors["base"] = 1.0
+    def calculate(base_price: int, features: List[str], lines: int, confidence: float) -> int:
+        price = base_price
         
-        # ضریب خطوط کد
-        line_factor = 1.0
-        if analysis.code_lines > 500:
-            line_factor = 1.5
-        elif analysis.code_lines > 300:
-            line_factor = 1.3
-        elif analysis.code_lines > 200:
-            line_factor = 1.2
-        elif analysis.code_lines > 100:
-            line_factor = 1.1
+        # خطوط کد
+        if lines > 500:
+            price *= 1.5
+        elif lines > 300:
+            price *= 1.3
+        elif lines > 200:
+            price *= 1.2
+        elif lines > 100:
+            price *= 1.1
         
-        # ضریب ویژگی‌ها
-        feature_factor = 1.0 + (len(analysis.features) * 0.05)
-        feature_factor = min(feature_factor, 2.0)
+        # ویژگی‌ها
+        price *= (1 + len(features) * 0.05)
         
-        # ضریب اعتماد
-        confidence_factor = 0.8 + (analysis.confidence * 0.4)
+        # اعتماد
+        price *= (0.8 + confidence * 0.4)
         
-        # ضریب امنیت
-        security_factor = 1.0 + (analysis.security_score / 200)
-        
-        # محاسبه نهایی
-        analysis.price_factors.update({
-            "lines": line_factor,
-            "features": feature_factor,
-            "confidence": confidence_factor,
-            "security": security_factor
-        })
-        
-        final = base
-        for factor in analysis.price_factors.values():
-            final *= factor
-        
-        # محدودیت‌ها
-        min_price = 500_000
-        max_price = 50_000_000
-        analysis.final_price = max(min_price, min(int(final), max_price))
-        
-        return analysis
+        # محدودیت
+        return max(500_000, min(int(price), 50_000_000))
 
-# ==================== SECURITY ANALYZER ====================
-class SecurityAnalyzer:
-    """تحلیل امنیتی ساده"""
+# ==================== CONFLICT MANAGER ====================
+class ConflictManager:
+    """مدیریت Conflict و Restart"""
     
-    VULNERABILITIES = [
-        (r"eval\(.*\)", "استفاده از eval (خطرناک)"),
-        (r"exec\(.*\)", "استفاده از exec (خطرناک)"),
-        (r"os\.system", "دستورات سیستمی"),
-        (r"subprocess\.call", "اجرای فرمان خارجی"),
-        (r"password\s*=\s*['\"][^'\"]+['\"]", "پسورد hardcoded"),
-        (r"api_key\s*=\s*['\"][^'\"]+['\"]", "API key hardcoded"),
-        (r"token\s*=\s*['\"][^'\"]+['\"]", "توکن hardcoded")
-    ]
+    def __init__(self):
+        self.conflict_count = 0
+        self.last_conflict = 0
+        self.is_recovering = False
     
-    @staticmethod
-    def analyze(code: str) -> Tuple[int, List[str]]:
-        issues = []
-        score = 100
+    async def handle_conflict(self):
+        """مدیریت Conflict"""
+        self.conflict_count += 1
+        self.last_conflict = time.time()
         
-        for pattern, desc in SecurityAnalyzer.VULNERABILITIES:
-            if re.search(pattern, code, re.IGNORECASE):
-                issues.append(desc)
-                score -= 15
+        wait_time = min(30 * (2 ** (self.conflict_count - 1)), 300)
+        logger.warning(f"⚠️ Conflict #{self.conflict_count} - Waiting {wait_time}s")
         
-        return max(score, 0), issues
-
-# ==================== HTTP SERVER ====================
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path in ['/', '/health', '/ping']:
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
-            response = {
-                "status": "online",
-                "service": "bot-price-analyzer",
-                "version": "20.0",
-                "time": datetime.now().isoformat()
-            }
-            
-            self.wfile.write(json.dumps(response).encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
+        await asyncio.sleep(wait_time)
+        
+        # پاکسازی کامل
+        try:
+            from telegram import Bot
+            bot = Bot(token=TOKEN)
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("✅ Webhook cleared after conflict")
+            await asyncio.sleep(5)
+        except:
+            pass
     
-    def log_message(self, format, *args):
-        pass  # Disable HTTP logs
-
-def run_http_server():
-    try:
-        server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
-        logger.info(f"✅ HTTP Server running on port {PORT}")
-        server.serve_forever()
-    except Exception as e:
-        logger.error(f"❌ HTTP Server error: {e}")
+    def should_reset(self) -> bool:
+        """آیا باید ریست کنیم؟"""
+        if self.conflict_count > 5:
+            return True
+        if time.time() - self.last_conflict > 3600:  # 1 ساعت بدون Conflict
+            self.conflict_count = 0
+        return False
 
 # ==================== MAIN BOT ====================
 class PriceAnalyzerBot:
-    """ربات اصلی تحلیلگر قیمت"""
+    """ربات اصلی"""
     
     def __init__(self):
-        self.ast_analyzer = ASTAnalyzer()
         self.detector = BotDetector()
-        self.price_calc = PriceCalculator()
-        self.security = SecurityAnalyzer()
         self.feature_extractor = FeatureExtractor()
+        self.price_calc = PriceCalculator()
+        self.conflict_manager = ConflictManager()
         
         self.processing_users = set()
         self.stats = {
-            'files_received': 0,
-            'analyses_done': 0,
-            'errors': 0
+            'start': time.time(),
+            'files': 0,
+            'errors': 0,
+            'conflicts': 0
         }
         
         logger.info("✅ Bot initialized")
@@ -360,28 +256,26 @@ class PriceAnalyzerBot:
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         
-        welcome = f"""
-🤖 **ربات تحلیل‌گر حرفه‌ای قیمت ربات تلگرام**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        text = f"""
+🤖 **ربات تحلیل‌گر قیمت ربات تلگرام**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 👋 سلام {user.first_name}!
 
-✨ **قابلیت‌ها:**
-• تحلیل AST کد Python
-• تشخیص هوشمند نوع ربات
-• شناسایی ۱۲+ ویژگی
-• محاسبه قیمت دقیق
-• تحلیل امنیتی
-
 📁 **نحوه استفاده:**
-۱. فایل `.py` ربات خود را ارسال کنید
-۲. منتظر تحلیل باشید (۱۰-۲۰ ثانیه)
-۳. گزارش کامل دریافت کنید
+1️⃣ فایل `.py` ربات خود را ارسال کنید
+2️⃣ منتظر تحلیل باشید
+3️⃣ گزارش کامل دریافت کنید
+
+💰 **قیمت بر اساس:**
+• نوع ربات
+• ویژگی‌ها
+• پیچیدگی کد
+• کیفیت کد
 
 👇 **فایل خود را ارسال کنید:**
         """
         
-        keyboard = [[InlineKeyboardButton("📋 نمونه", callback_data="sample")]]
-        await update.message.reply_text(welcome, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def handle_file(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
@@ -399,53 +293,37 @@ class PriceAnalyzerBot:
             return
         
         self.processing_users.add(user_id)
-        self.stats['files_received'] += 1
+        self.stats['files'] += 1
         
         try:
             msg = await update.message.reply_text("📥 دریافت فایل...")
             
             # Download
             file = await doc.get_file()
-            content_bytes = await file.download_as_bytearray()
-            content = content_bytes.decode('utf-8', errors='ignore')
+            content = (await file.download_as_bytearray()).decode('utf-8', errors='ignore')
+            lines = len([l for l in content.split('\n') if l.strip()])
             
-            await msg.edit_text("🔍 تحلیل کد...")
-            
-            # Create analysis object
-            analysis = BotAnalysis(doc.file_name)
-            lines = content.split('\n')
-            analysis.total_lines = len(lines)
-            analysis.code_lines = len([l for l in lines if l.strip() and not l.strip().startswith('#')])
-            analysis.comment_lines = len([l for l in lines if l.strip().startswith('#')])
-            
-            # AST Analysis
-            ast_data = self.ast_analyzer.analyze(content)
+            await msg.edit_text("🔍 تحلیل...")
             
             # Detect type
-            category, confidence, reasons = self.detector.detect(content)
-            analysis.category = category
-            analysis.confidence = confidence
-            analysis.reasons = reasons
+            category, confidence, base_price = self.detector.detect(content)
             
             # Extract features
-            analysis.features = self.feature_extractor.extract(content)
-            
-            # Security
-            sec_score, sec_issues = self.security.analyze(content)
-            analysis.security_score = sec_score
-            analysis.security_issues = sec_issues
+            features = self.feature_extractor.extract(content)
             
             # Calculate price
-            analysis = self.price_calc.calculate(analysis)
+            final_price = self.price_calc.calculate(base_price, features, lines, confidence)
             
             # Generate report
-            report = self.generate_report(analysis)
+            report = self._generate_report(
+                doc.file_name, category, confidence, 
+                features, lines, final_price
+            )
             
             await msg.delete()
             await update.message.reply_text(report, parse_mode='Markdown')
             
-            self.stats['analyses_done'] += 1
-            logger.info(f"✅ Analysis done: {doc.file_name}")
+            logger.info(f"✅ Done: {doc.file_name} - {category}")
             
         except Exception as e:
             logger.error(f"Error: {e}")
@@ -455,160 +333,155 @@ class PriceAnalyzerBot:
         finally:
             self.processing_users.discard(user_id)
     
-    def generate_report(self, a: BotAnalysis) -> str:
+    def _generate_report(self, filename: str, category: str, confidence: float, 
+                        features: List[str], lines: int, price: int) -> str:
         """تولید گزارش"""
-        now = a.timestamp.strftime("%Y/%m/%d %H:%M")
+        now = datetime.now().strftime("%Y/%m/%d %H:%M")
         
         report = f"""
-📄 **گزارش تحلیل حرفه‌ای ربات تلگرام**
+📄 **گزارش تحلیل ربات**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 فایل: {a.filename}
+📁 فایل: {filename}
 ⏰ زمان: {now}
-🆔 شناسه: {a.id}
 
-🎯 **تشخیص نوع ربات:**
-• {a.category}
-• اطمینان: {a.confidence*100:.0f}%
+🎯 **نوع ربات:** {category}
+📊 **اطمینان:** {confidence*100:.0f}%
+
+✨ **ویژگی‌ها:** ({len(features)})
 """
-        
-        if a.reasons:
-            report += "• دلایل:\n"
-            for r in a.reasons:
-                report += f"  └ {r}\n"
-        
-        report += f"""
-✨ **ویژگی‌ها: ({len(a.features)} مورد)**
-"""
-        for f in a.features[:8]:
+        for f in features[:8]:
             report += f"• ✅ {f}\n"
         
-        if len(a.features) > 8:
-            report += f"• ... و {len(a.features)-8} مورد دیگر\n"
+        if len(features) > 8:
+            report += f"• ... و {len(features)-8} مورد دیگر\n"
         
         report += f"""
-📊 **آمار کد:**
-• کل خطوط: {a.total_lines}
-• خطوط کد: {a.code_lines}
-• کامنت: {a.comment_lines}
+📈 **آمار:**
+• خطوط کد: {lines}
+• ویژگی‌ها: {len(features)}
 
-🛡️ **امنیت: {a.security_score}/100**
-"""
-        if a.security_issues:
-            for issue in a.security_issues[:3]:
-                report += f"• ⚠️ {issue}\n"
-        else:
-            report += "• ✅ بدون مشکل امنیتی\n"
-        
-        report += f"""
 💰 **قیمت:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💵 ریال: **{a.final_price:,} ریال**
-💳 تومان: **{a.final_price//10:,} تومان**
-💲 دلار: **${a.final_price/50_000:.2f}**
+💵 ریال: **{price:,} ریال**
+💳 تومان: **{price//10:,} تومان**
+💲 دلار: **${price/50_000:.2f}**
 
-⚖️ **فاکتورها:**
-"""
-        for name, val in a.price_factors.items():
-            report += f"• {name}: {val:.2f}x\n"
-        
-        report += f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤖 ربات تحلیل‌گر - نسخه ۲۰.۰
+🤖 ربات تحلیل‌گر - نسخه ۲۱.۰
         """
         
         return report
+
+# ==================== CLEANUP FUNCTIONS ====================
+async def force_cleanup():
+    """پاکسازی اجباری"""
+    try:
+        import requests
+        url = f"https://api.telegram.org/bot{TOKEN}/deleteWebhook"
+        response = requests.get(url, params={"drop_pending_updates": "true"})
+        logger.info(f"Cleanup result: {response.json()}")
+        await asyncio.sleep(5)
+    except Exception as e:
+        logger.error(f"Cleanup error: {e}")
+
+# ==================== MAIN LOOP ====================
+async def run_bot_with_retry():
+    """اجرای ربات با قابلیت Retry"""
     
-    async def sample(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        
-        text = """
-📋 **نمونه گزارش:**
+    retry_count = 0
+    conflict_mgr = ConflictManager()
+    
+    while retry_count < MAX_RETRIES:
+        try:
+            logger.info("="*50)
+            logger.info(f"🚀 Starting bot (attempt {retry_count + 1}/{MAX_RETRIES})")
+            logger.info("="*50)
+            
+            # Cleanup first
+            await force_cleanup()
+            
+            # Create bot
+            bot = PriceAnalyzerBot()
+            
+            # Create application
+            app = Application.builder().token(TOKEN).build()
+            
+            # Add handlers
+            app.add_handler(CommandHandler("start", bot.start))
+            app.add_handler(CommandHandler("help", bot.start))
+            app.add_handler(MessageHandler(filters.Document.ALL, bot.handle_file))
+            
+            # Start
+            await app.initialize()
+            await app.start()
+            await app.updater.start_polling(
+                drop_pending_updates=True,
+                timeout=30,
+                poll_interval=0.5,
+                allowed_updates=["message"]
+            )
+            
+            logger.info("✅ Bot is running!")
+            logger.info("🎯 Ready to analyze files...")
+            
+            # Reset retry counter on success
+            retry_count = 0
+            
+            # Keep running
+            await asyncio.Event().wait()
+            
+        except Conflict as e:
+            logger.error(f"❌ Conflict: {e}")
+            retry_count += 1
+            bot.stats['conflicts'] += 1
+            
+            wait_time = min(30 * retry_count, 300)
+            logger.info(f"⏳ Waiting {wait_time}s before retry...")
+            await asyncio.sleep(wait_time)
+            
+            # Force cleanup
+            await force_cleanup()
+            
+        except Exception as e:
+            logger.error(f"❌ Error: {e}")
+            retry_count += 1
+            await asyncio.sleep(10)
+    
+    logger.critical("❌ Max retries reached. Exiting...")
 
-🎯 **تشخیص:** فروشگاه آنلاین
-✨ **ویژگی‌ها:**
-• کیبورد اینلاین
-• دستورات سفارشی
-• دیتابیس SQLite
-• درگاه پرداخت
-
-💰 **قیمت:** ۴,۵۰۰,۰۰۰ ریال
-
-👇 **ربات خود را تحلیل کنید!**
-        """
-        
-        keyboard = [[InlineKeyboardButton("📤 ارسال فایل", callback_data="send")]]
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+# ==================== KEEP ALIVE ====================
+async def keep_alive():
+    """Keep-alive pings"""
+    while True:
+        try:
+            import requests
+            requests.get(f"https://bot-cash.onrender.com/health", timeout=5)
+            logger.debug("Keep-alive ping sent")
+        except:
+            pass
+        await asyncio.sleep(240)  # 4 minutes
 
 # ==================== MAIN ====================
-async def run_bot():
-    """اجرای اصلی"""
-    logger.info("="*50)
-    logger.info("🤖 Starting Telegram Bot Price Analyzer v20.0")
-    logger.info("="*50)
-    
-    try:
-        # Create bot
-        bot = PriceAnalyzerBot()
-        
-        # Create application
-        app = Application.builder().token(TOKEN).build()
-        
-        # Add handlers
-        app.add_handler(CommandHandler("start", bot.start))
-        app.add_handler(CommandHandler("help", bot.start))
-        app.add_handler(MessageHandler(filters.Document.ALL, bot.handle_file))
-        app.add_handler(CallbackQueryHandler(bot.sample, pattern="^sample$"))
-        app.add_handler(CallbackQueryHandler(bot.start, pattern="^send$"))
-        
-        # Clear webhook
-        from telegram import Bot
-        temp = Bot(token=TOKEN)
-        await temp.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook cleared")
-        
-        await asyncio.sleep(2)
-        
-        # Start polling
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(
-            drop_pending_updates=True,
-            timeout=30,
-            poll_interval=0.5
-        )
-        
-        logger.info("✅ Bot is running!")
-        logger.info("🎯 Ready to analyze files...")
-        
-        # Keep running
-        await asyncio.Event().wait()
-        
-    except Conflict as e:
-        logger.error(f"Conflict: {e}")
-        await asyncio.sleep(30)
-        raise
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise
-
 def main():
     """Main entry point"""
     # Start HTTP server
     http_thread = threading.Thread(target=run_http_server, daemon=True)
     http_thread.start()
     
+    # Handle signals
+    def signal_handler(sig, frame):
+        logger.info("👋 Shutting down...")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     # Run bot
-    while True:
-        try:
-            asyncio.run(run_bot())
-        except KeyboardInterrupt:
-            logger.info("👋 Bot stopped")
-            break
-        except Exception as e:
-            logger.error(f"Bot crashed: {e}")
-            logger.info("🔄 Restarting in 10 seconds...")
-            time.sleep(10)
+    try:
+        asyncio.run(run_bot_with_retry())
+    except KeyboardInterrupt:
+        logger.info("👋 Bot stopped")
+    except Exception as e:
+        logger.error(f"Fatal: {e}")
 
 if __name__ == "__main__":
     main()
