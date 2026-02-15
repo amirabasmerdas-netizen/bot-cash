@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🤖 Telegram Bot Price Analyzer - Professional Version
-Version: 16.0 - Fixed Event Loop
+🤖 Telegram Bot Price Analyzer - Conflict Free Version
+Version: 17.0 - Smart Conflict Handler
 """
 
 import os
@@ -42,6 +42,7 @@ try:
         ContextTypes,
         filters
     )
+    from telegram.error import Conflict, TimedOut, NetworkError
 except ImportError as e:
     logger.error(f"❌ Import error: {e}")
     sys.exit(1)
@@ -56,8 +57,8 @@ class HealthHandler(BaseHTTPRequestHandler):
             response = json.dumps({
                 "status": "online",
                 "service": "bot-price-analyzer",
-                "version": "16.0",
-                "time": datetime.now().strftime("%H:%M:%S")
+                "version": "17.0",
+                "uptime": time.time() - start_time
             })
             self.wfile.write(response.encode())
         else:
@@ -65,16 +66,68 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
     
     def log_message(self, format, *args):
-        pass  # Disable HTTP logs
+        pass
 
 def run_http_server():
-    """اجرای HTTP Server در thread جداگانه"""
+    """اجرای HTTP Server"""
     try:
         server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
         logger.info(f"✅ HTTP Server running on port {PORT}")
         server.serve_forever()
     except Exception as e:
         logger.error(f"❌ HTTP Server error: {e}")
+
+# ==================== CONFLICT MANAGER ====================
+class ConflictManager:
+    """مدیریت Conflict و Reconnect"""
+    
+    def __init__(self):
+        self.conflict_count = 0
+        self.last_conflict_time = 0
+        self.max_conflicts = 5
+        self.is_recovering = False
+    
+    async def handle_conflict(self):
+        """مدیریت Conflict"""
+        self.conflict_count += 1
+        self.last_conflict_time = time.time()
+        
+        logger.warning(f"⚠️ Conflict detected (#{self.conflict_count})")
+        
+        if self.conflict_count > self.max_conflicts:
+            logger.error("❌ Too many conflicts. Waiting 5 minutes...")
+            await asyncio.sleep(300)
+            self.conflict_count = 0
+            return
+        
+        # Exponential backoff
+        wait_time = min(30 * (2 ** (self.conflict_count - 1)), 300)
+        logger.info(f"⏳ Waiting {wait_time} seconds...")
+        await asyncio.sleep(wait_time)
+    
+    async def cleanup_bot(self):
+        """پاکسازی کامل قبل از reconnect"""
+        try:
+            from telegram import Bot
+            bot = Bot(token=TOKEN)
+            
+            # Delete webhook
+            await bot.delete_webhook(drop_pending_updates=True)
+            logger.info("✅ Webhook deleted")
+            
+            # Get updates to clear queue
+            await bot.get_updates(offset=-1)
+            logger.info("✅ Updates queue cleared")
+            
+            await asyncio.sleep(5)
+            
+        except Exception as e:
+            logger.error(f"❌ Cleanup error: {e}")
+    
+    def reset(self):
+        """ریست کردن شمارنده Conflict"""
+        self.conflict_count = 0
+        logger.info("✅ Conflict counter reset")
 
 # ==================== PROFESSIONAL ANALYZER ====================
 class ProfessionalAnalyzer:
@@ -104,18 +157,6 @@ class ProfessionalAnalyzer:
             "description": "ربات بازی، مسابقه و سرگرمی",
             "keywords": ["game", "play", "بازی", "سرگرمی", "مسابقه", "score", "level"],
             "price_range": (1_800_000, 5_000_000)
-        },
-        {
-            "name": "📰 اخبار و اطلاع‌رسانی",
-            "description": "ربات ارسال اخبار، اعلان‌ها و اطلاعیه‌ها",
-            "keywords": ["news", "اخبار", "اطلاعیه", "اعلان", "broadcast", "پخش"],
-            "price_range": (2_000_000, 6_000_000)
-        },
-        {
-            "name": "⚙️ سرویس و ابزار",
-            "description": "ربات ارائه خدمات کاربردی و ابزار",
-            "keywords": ["tool", "service", "ابزار", "سرویس", "تبدیل", "دانلود", "search"],
-            "price_range": (2_000_000, 7_000_000)
         }
     ]
     
@@ -173,7 +214,7 @@ class ProfessionalAnalyzer:
         
         return {
             "name": "⚙️ سفارشی",
-            "description": "ربات با قابلیت‌های خاص و اختصاصی",
+            "description": "ربات با قابلیت‌های خاص",
             "confidence": 0.3,
             "price_range": (2_000_000, 8_000_000)
         }
@@ -211,7 +252,7 @@ class ProfessionalAnalyzer:
         # Integrations
         if any(db in code_lower for db in ['sqlite', 'mysql', 'postgres', 'database']):
             features.append("دیتابیس")
-        if any(pay in code_lower for pay in ['zarinpal', 'idpay', 'nextpay', 'payment', 'پرداخت']):
+        if any(pay in code_lower for pay in ['zarinpal', 'idpay', 'nextpay', 'payment']):
             features.append("درگاه پرداخت")
         
         return list(set(features))
@@ -240,16 +281,15 @@ class ProfessionalAnalyzer:
         # Features (up to 30)
         score += min(len(analysis["features"]) * 3, 30)
         
-        # Quality (up to 20)
+        # Quality (up to 30)
         if analysis["file_info"]["comment_ratio"] > 0.1:
-            score += 10
+            score += 15
         elif analysis["file_info"]["comment_ratio"] > 0.05:
-            score += 5
+            score += 10
         
-        # Structure (up to 10)
-        if 'برنامه‌نویسی شی‌گرا' in analysis["features"]:
-            score += 5
         if 'مدیریت خطا' in analysis["features"]:
+            score += 10
+        if 'Async Programming' in analysis["features"]:
             score += 5
         
         return min(score, 100)
@@ -260,7 +300,7 @@ class PriceCalculator:
     
     @staticmethod
     def calculate(analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """محاسبه قیمت نهایی"""
+        """محاسبه قیمت"""
         score = analysis["score"]
         bot_type = analysis["detected_type"]
         
@@ -277,8 +317,6 @@ class PriceCalculator:
             tech_factor += 0.1
         if 'دیتابیس' in analysis["features"]:
             tech_factor += 0.15
-        if 'درگاه پرداخت' in analysis["features"]:
-            tech_factor += 0.2
         
         # ضریب اندازه
         loc = analysis["file_info"]["code_lines"]
@@ -290,7 +328,7 @@ class PriceCalculator:
         elif loc > 200:
             size_factor = 1.1
         
-        # محاسبه نهایی
+        # محاسبه
         raw_price = type_base * score_factor * tech_factor * size_factor
         
         # محدودیت‌ها
@@ -320,7 +358,6 @@ class PriceCalculator:
             "level": level,
             "score": score,
             "type_name": bot_type["name"],
-            "confidence": bot_type["confidence"],
             "price_range": bot_type["price_range"]
         }
 
@@ -380,8 +417,7 @@ class ReportGenerator:
 • حداکثر: {price['price_range'][1]:,} ریال
         """
         
-        # گزارش نهایی
-        report = f"""
+        return f"""
 📄 **گزارش تحلیل حرفه‌ای ربات تلگرام**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📁 فایل: {filename}
@@ -401,22 +437,23 @@ class ReportGenerator:
 • برای سفارش توسعه با @username تماس بگیرید
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤖 ربات تحلیل‌گر قیمت - نسخه ۱۶.۰
+🤖 ربات تحلیل‌گر قیمت - نسخه ۱۷.۰
         """
-        
-        return report
 
-# ==================== BOT HANDLERS ====================
-class BotHandler:
-    """Handler اصلی ربات"""
+# ==================== ROBUST BOT ====================
+class RobustBot:
+    """ربات با مدیریت خطای قوی"""
     
     def __init__(self):
         self.analyzer = ProfessionalAnalyzer()
         self.calculator = PriceCalculator()
         self.reporter = ReportGenerator()
+        self.conflict_manager = ConflictManager()
         self.processing = set()
+        self.app = None
+        self.running = False
     
-    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def start_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """دستور /start"""
         text = """
 🤖 **ربات تحلیل‌گر حرفه‌ای قیمت ربات تلگرام**
@@ -425,7 +462,7 @@ class BotHandler:
 • تحلیل کامل کد Python
 • تشخیص هوشمند نوع ربات
 • گزارش حرفه‌ای با فرمت زیبا
-• قیمت‌گذاری منصفانه و شفاف
+• **اتصال پایدار با مدیریت Conflict**
 
 📊 **نحوه استفاده:**
 ۱. فایل `.py` ربات خود را ارسال کنید
@@ -442,7 +479,7 @@ class BotHandler:
         
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
-    async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def document_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """پردازش فایل"""
         user_id = update.effective_user.id
         
@@ -451,7 +488,6 @@ class BotHandler:
             return
         
         if not update.message.document:
-            await update.message.reply_text("⚠️ لطفا یک فایل ارسال کنید.")
             return
         
         doc = update.message.document
@@ -464,39 +500,30 @@ class BotHandler:
         self.processing.add(user_id)
         
         try:
-            # پیام وضعیت
             status_msg = await update.message.reply_text("📥 در حال دریافت فایل...")
             
-            # دانلود
             file = await doc.get_file()
             content_bytes = await file.download_as_bytearray()
             
-            if len(content_bytes) > 3 * 1024 * 1024:  # 3MB
+            if len(content_bytes) > 3 * 1024 * 1024:
                 await status_msg.edit_text("❌ فایل بسیار بزرگ است! (حداکثر 3MB)")
                 return
             
             content = content_bytes.decode('utf-8', errors='ignore')
             
             await status_msg.edit_text("🔍 تحلیل کد...")
-            
-            # تحلیل
             analysis = self.analyzer.analyze(content)
             
             await status_msg.edit_text("💰 محاسبه قیمت...")
-            
-            # قیمت
             price_result = self.calculator.calculate(analysis)
             
-            # گزارش
             report = self.reporter.generate(file_name, analysis, price_result)
             
-            # حذف پیام وضعیت
             await context.bot.delete_message(
                 chat_id=update.effective_chat.id,
                 message_id=status_msg.message_id
             )
             
-            # ارسال گزارش
             await update.message.reply_text(report, parse_mode='Markdown')
             
         except Exception as e:
@@ -506,7 +533,7 @@ class BotHandler:
         finally:
             self.processing.discard(user_id)
     
-    async def sample(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def sample_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """نمونه گزارش"""
         query = update.callback_query
         await query.answer()
@@ -527,72 +554,108 @@ class BotHandler:
         """
         
         keyboard = [
-            [InlineKeyboardButton("📤 ارسال فایل ربات", callback_data="send")]
+            [InlineKeyboardButton("📤 ارسال فایل", callback_data="send")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
-
-# ==================== MAIN ASYNC FUNCTION ====================
-async def run_bot():
-    """اجرای اصلی ربات"""
-    logger.info("=" * 60)
-    logger.info("🤖 Telegram Bot Price Analyzer - Professional v16.0")
-    logger.info("=" * 60)
     
-    try:
-        # پاکسازی قبل از شروع
-        from telegram import Bot
-        temp_bot = Bot(token=TOKEN)
-        await temp_bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook cleared")
-        await asyncio.sleep(2)
+    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """مدیریت خطاهای ربات"""
+        error = context.error
         
-        # ایجاد اپلیکیشن
-        app = Application.builder().token(TOKEN).build()
+        if isinstance(error, Conflict):
+            logger.error(f"⚠️ Conflict in handler: {error}")
+            self.running = False
+            raise error  # Let main loop handle it
         
-        # ایجاد هندلر
-        handler = BotHandler()
+        elif isinstance(error, (TimedOut, NetworkError)):
+            logger.warning(f"📡 Network issue: {error}")
         
-        # ثبت هندلرها
-        app.add_handler(CommandHandler("start", handler.start))
-        app.add_handler(CommandHandler("help", handler.start))
-        app.add_handler(MessageHandler(filters.Document.ALL, handler.handle_document))
-        app.add_handler(CallbackQueryHandler(handler.sample, pattern="^sample$"))
-        app.add_handler(CallbackQueryHandler(handler.start, pattern="^send$"))
+        else:
+            logger.error(f"❌ Handler error: {error}")
+    
+    async def run(self):
+        """اجرای اصلی ربات"""
+        retry_count = 0
+        max_retries = 10
         
-        logger.info("✅ Bot setup completed")
+        while retry_count < max_retries:
+            try:
+                logger.info("=" * 60)
+                logger.info("🤖 Starting Robust Bot v17.0")
+                logger.info("=" * 60)
+                
+                # پاکسازی قبل از شروع
+                await self.conflict_manager.cleanup_bot()
+                
+                # ایجاد اپلیکیشن
+                self.app = Application.builder().token(TOKEN).build()
+                
+                # ثبت هندلرها
+                self.app.add_handler(CommandHandler("start", self.start_handler))
+                self.app.add_handler(CommandHandler("help", self.start_handler))
+                self.app.add_handler(MessageHandler(filters.Document.ALL, self.document_handler))
+                self.app.add_handler(CallbackQueryHandler(self.sample_handler, pattern="^sample$"))
+                self.app.add_handler(CallbackQueryHandler(self.start_handler, pattern="^send$"))
+                self.app.add_error_handler(self.error_handler)
+                
+                logger.info("✅ Handlers registered")
+                
+                # شروع
+                await self.app.initialize()
+                await self.app.start()
+                
+                # Polling با تنظیمات خاص
+                await self.app.updater.start_polling(
+                    drop_pending_updates=True,
+                    timeout=25,
+                    poll_interval=0.5,
+                    allowed_updates=["message", "callback_query"]
+                )
+                
+                logger.info("✅ Bot is RUNNING and ready!")
+                self.running = True
+                retry_count = 0
+                
+                # نگه داشتن برنامه
+                while self.running:
+                    await asyncio.sleep(1)
+                
+            except Conflict as e:
+                logger.error(f"⚠️ Conflict: {e}")
+                await self.conflict_manager.handle_conflict()
+                retry_count += 1
+                
+            except Exception as e:
+                logger.error(f"❌ Error: {e}")
+                retry_count += 1
+                await asyncio.sleep(30)
+            
+            finally:
+                if self.app:
+                    try:
+                        await self.app.stop()
+                        await self.app.shutdown()
+                    except:
+                        pass
         
-        # شروع polling
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling(
-            drop_pending_updates=True,
-            timeout=30,
-            poll_interval=0.5,
-            allowed_updates=["message", "callback_query"]
-        )
-        
-        logger.info("✅ Bot is RUNNING and ready!")
-        logger.info("🎯 Waiting for files...")
-        
-        # نگه داشتن برنامه
-        await asyncio.Event().wait()
-        
-    except Exception as e:
-        logger.error(f"❌ Bot error: {e}")
+        logger.error("❌ Max retries reached. Exiting...")
 
-# ==================== MAIN FUNCTION ====================
+# ==================== MAIN ====================
+start_time = time.time()
+
 def main():
     """تابع اصلی"""
-    # شروع HTTP Server در thread جداگانه
+    # شروع HTTP Server
     http_thread = threading.Thread(target=run_http_server, daemon=True)
     http_thread.start()
-    logger.info(f"✅ HTTP Server started on port {PORT}")
     
-    # اجرای ربات
+    # ایجاد و اجرای ربات
+    bot = RobustBot()
+    
     try:
-        asyncio.run(run_bot())
+        asyncio.run(bot.run())
     except KeyboardInterrupt:
         logger.info("👋 Bot stopped by user")
     except Exception as e:
