@@ -1,15 +1,20 @@
 services:
-  - type: web
-    name: bot-professional-v16
-    env: python
+  - type: worker
+    name: telegram-bot-analyzer-pro
+    runtime: python
     region: frankfurt
+    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    startCommand: python main.py
     envVars:
       - key: BOT_TOKEN
         sync: false
-      - key: PORT
-        value: 8443
-    healthCheckPath: /health
-    autoDeploy: true
-    plan: free
+        value: "7667947505:AAHoaSzSEeB6okKIpuwitnID4SEmbko71d0"
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: USE_WEBHOOK
+        value: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
