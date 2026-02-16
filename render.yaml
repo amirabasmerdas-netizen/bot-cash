@@ -1,6 +1,6 @@
 services:
-  - type: worker
-    name: telegram-bot-analyzer-pro
+  - type: web
+    name: telegram-bot-analyzer
     runtime: python
     region: frankfurt
     plan: free
@@ -8,13 +8,15 @@ services:
     startCommand: python main.py
     envVars:
       - key: BOT_TOKEN
-        sync: false
         value: "7667947505:AAHoaSzSEeB6okKIpuwitnID4SEmbko71d0"
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: telegram-bot-analyzer
+          property: url
       - key: ENVIRONMENT
         value: production
       - key: DEBUG
         value: false
-      - key: USE_WEBHOOK
-        value: false
-      - key: PYTHON_VERSION
-        value: 3.11.0
+      - key: PORT
+        value: 8443
