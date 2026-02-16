@@ -2,7 +2,7 @@
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
 ║                    🤖 TELEGRAM BOT PRICE ANALYZER ULTIMATE                     ║
-║                         Version: 25.0 - Professional Edition                   ║
+║                         Version: 26.0 - Professional Edition                   ║
 ║                    Advanced Telegram Bot Price Analysis System                 ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
@@ -337,7 +337,7 @@ class BotTypeDetector:
             best_category, best_score = sorted_scores[0]
             
             # Calculate confidence
-            max_possible = 100  # Maximum possible score
+            max_possible = 100
             confidence = min(best_score / max_possible, 0.95)
             
             # Get top reasons
@@ -472,8 +472,8 @@ class PriceCalculator:
         feature_weight = sum(f["weight"] for f in features)
         feature_factor = 1.0 + (feature_weight / 25)
         
-        # Size factor (based on code lines)
-        code_lines = ast_results.get("functions", 0) * 10 + 50  # Estimate
+        # Size factor
+        code_lines = ast_results.get("functions", 0) * 10 + 50
         if code_lines > 500:
             size_factor = 1.5
         elif code_lines > 300:
@@ -599,7 +599,7 @@ class ReportGenerator:
 • 📁 فایل: `{filename}`
 • 🆔 شناسه: {analysis.id}
 • ⏰ زمان: {now}
-• 📊 نسخه: 25.0 Ultimate
+• 📊 نسخه: 26.0 Ultimate
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎯 **تشخیص نوع ربات:**
@@ -651,7 +651,7 @@ class ReportGenerator:
 🎯 برای سفارش توسعه: @SupportBot
 
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║                    🤖 Telegram Price Analyzer - Version 25.0                   ║
+║                    🤖 Telegram Price Analyzer - Version 26.0                   ║
 ║                              Ultimate Edition                                  ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
@@ -661,28 +661,40 @@ class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
             self.send_response(200)
-            self.send_header('Content-type', 'text/html')
+            self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write(b"""
+            html = """
+            <!DOCTYPE html>
             <html>
-                <head><title>Bot Status</title></head>
+                <head>
+                    <meta charset="UTF-8">
+                    <title>Bot Status</title>
+                    <style>
+                        body { font-family: Arial; text-align: center; margin-top: 50px; }
+                        .status { color: green; font-size: 24px; }
+                    </style>
+                </head>
                 <body>
                     <h1>🤖 Telegram Bot Price Analyzer</h1>
-                    <p>Status: <strong style="color:green">RUNNING</strong></p>
-                    <p>Version: 25.0 Ultimate</p>
+                    <p class="status">✅ Status: <strong>RUNNING</strong></p>
+                    <p>Version: 26.0 Ultimate</p>
+                    <p>Environment: """ + ENVIRONMENT + """</p>
+                    <p>Time: """ + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + """</p>
                 </body>
             </html>
-            """)
+            """
+            self.wfile.write(html.encode('utf-8'))
         elif self.path == '/health':
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             response = {
                 "status": "healthy",
-                "version": "25.0",
+                "version": "26.0",
+                "environment": ENVIRONMENT,
                 "timestamp": datetime.now().isoformat()
             }
-            self.wfile.write(json.dumps(response).encode())
+            self.wfile.write(json.dumps(response).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()
@@ -875,7 +887,7 @@ class UltimateBot:
             if now - t < 60
         ]
         
-        if len(self.rate_limits[user_id]) >= 10:  # 10 requests per minute
+        if len(self.rate_limits[user_id]) >= 10:
             return False
         
         self.rate_limits[user_id].append(now)
@@ -957,7 +969,7 @@ def main():
     print(f"""
 ╔══════════════════════════════════════════════════════════════════╗
 ║                                                                     ║
-║     🤖 TELEGRAM BOT PRICE ANALYZER - ULTIMATE EDITION v25.0        ║
+║     🤖 TELEGRAM BOT PRICE ANALYZER - ULTIMATE EDITION v26.0        ║
 ║                                                                     ║
 ║     Configuration:                                                  ║
 ║     • Python: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}                        ║
